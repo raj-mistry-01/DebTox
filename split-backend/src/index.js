@@ -13,12 +13,12 @@ async function startServer() {
 	try {
 		// Initialize database tables on startup with timeout
 		// alter: true will add missing columns to existing tables
-		const dbInitPromise = initializeModels({ alter: true });
+		// const dbInitPromise = initializeModels({ alter: true });
 		const timeoutPromise = new Promise((_, reject) => 
 			setTimeout(() => reject(new Error('Database initialization timeout')), 15000)
 		);
 
-		await Promise.race([dbInitPromise, timeoutPromise]);
+		await Promise.race([timeoutPromise]);
 		console.log('Database synchronized');
 
 		app.listen(PORT, () => {

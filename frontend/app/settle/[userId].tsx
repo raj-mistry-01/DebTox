@@ -1,11 +1,12 @@
+import React, { useState } from 'react';
 import { MOCK_FRIENDS } from '@/data/mockData';
-import { useSetuPayment } from '@/hooks/use-setu';
+import { useUroPay } from '@/hooks/use-uropay';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,15 +19,6 @@ import {
 
 type PaymentMethod = 'Cash' | 'Card' | 'UPI';
 
-const TERMINAL_STATUSES = ['PAYMENT_SUCCESSFUL', 'PAYMENT_FAILED', 'BILL_EXPIRED'];
-
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  BILL_CREATED:        { label: '⏳ Awaiting payment…',   color: '#f59e0b' },
-  PAYMENT_SUCCESSFUL:  { label: '✅ Payment received!',    color: '#4ade80' },
-  PAYMENT_FAILED:      { label: '❌ Payment failed',       color: '#f87171' },
-  BILL_EXPIRED:        { label: '⏰ Link expired',         color: '#888'    },
-};
-
 export default function SettleUpScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const friend = MOCK_FRIENDS.find((f) => f.user.id === userId) ?? MOCK_FRIENDS[0];
@@ -34,10 +26,9 @@ export default function SettleUpScreen() {
   const [amount, setAmount] = useState(Math.abs(friend.balance).toFixed(2));
   const [note, setNote] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('Cash');
-  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
 
-  const { initiatePayment, pollStatus, loading, shortURL, platformBillID } = useSetuPayment();
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { loading, generateQRCode } = useUroPay();
 
   const initials = friend.user.name
     .split(' ')
@@ -60,7 +51,7 @@ export default function SettleUpScreen() {
     );
   };
 
-  // ─── UPI settlement via Setu ────────────────────────────────────────────────
+  // ─── UPI settlement via UroPay ────────────────────────────────────────────────
   const handleSettleUPI = async () => {
     const parsed = parseFloat(amount);
     if (isNaN(parsed) || parsed <= 0) {
@@ -68,51 +59,20 @@ export default function SettleUpScreen() {
       return;
     }
 
-    // Reset previous status if retrying
-    setPaymentStatus(null);
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-
-    await initiatePayment({
-      amount: parsed * 100,                    // ₹ → paise
-      billerBillID: `TXN-${Date.now()}`,       // unique per transaction
-      note: note || `Settle up with ${friend.user.name}`,
-    });
+    const amountInPaise = Math.round(parsed * 100);
+    const order = await generateQRCode(amountInPaise, note || `Settle up with ${friend.user.name}`);
+    
+    if (order?.qrCode) {
+      setQrCode(order.qrCode);
+    } else {
+      Alert.alert('Error', 'Could not generate UPI QR Code. Try again.');
+    }
   };
-
-  // ─── Poll for UPI status once platformBillID is available ──────────────────
-  useEffect(() => {
-    if (!platformBillID) return;
-
-    setPaymentStatus('BILL_CREATED');
-
-    pollIntervalRef.current = setInterval(async () => {
-      const status = await pollStatus();
-      if (!status) return;
-
-      setPaymentStatus(status);
-
-      if (TERMINAL_STATUSES.includes(status)) {
-        clearInterval(pollIntervalRef.current!);
-
-        if (status === 'PAYMENT_SUCCESSFUL') {
-          Alert.alert('✅ Payment Successful!', `₹${amount} received from ${friend.user.name}.`, [
-            { text: 'Done', onPress: () => router.back() },
-          ]);
-        } else if (status === 'PAYMENT_FAILED') {
-          Alert.alert('❌ Payment Failed', 'The payment was not completed. You can retry.');
-        } else if (status === 'BILL_EXPIRED') {
-          Alert.alert('⏰ Link Expired', 'This payment link has expired. Generate a new one.');
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(pollIntervalRef.current!);
-  }, [platformBillID]);
 
   const methods: { icon: React.ComponentProps<typeof Ionicons>['name']; label: PaymentMethod }[] = [
     { icon: 'cash-outline',           label: 'Cash' },
     { icon: 'card-outline',           label: 'Card' },
-    { icon: 'phone-portrait-outline', label: 'UPI'  },
+    { icon: 'qr-code-outline',        label: 'UPI'  },
   ];
 
   return (
@@ -202,43 +162,32 @@ export default function SettleUpScreen() {
           numberOfLines={3}
         />
 
-        {/* UPI status badge */}
-        {paymentStatus && STATUS_LABELS[paymentStatus] && (
-          <View style={[styles.statusBadge, { borderColor: STATUS_LABELS[paymentStatus].color }]}>
-            <Text style={[styles.statusText, { color: STATUS_LABELS[paymentStatus].color }]}>
-              {STATUS_LABELS[paymentStatus].label}
-            </Text>
-            {paymentStatus === 'BILL_CREATED' && (
-              <ActivityIndicator size="small" color={STATUS_LABELS[paymentStatus].color} style={{ marginLeft: 8 }} />
-            )}
-          </View>
-        )}
 
-        {/* UPI payment link */}
-        {shortURL && (
-          <View style={styles.linkRow}>
-            <Ionicons name="link-outline" size={14} color="#0ea5e9" />
-            <Text style={styles.linkText} numberOfLines={1}>{shortURL}</Text>
-          </View>
-        )}
-
-        {/* Action buttons */}
         {selectedMethod === 'UPI' ? (
-          <TouchableOpacity
-            style={[styles.settleBtn, styles.upiBtn, loading && styles.btnDisabled]}
-            onPress={handleSettleUPI}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="phone-portrait-outline" size={20} color="#fff" />
-                <Text style={styles.settleBtnText}>Pay via UPI</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          qrCode ? (
+            <View style={{ alignItems: 'center', marginTop: 30 }}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 16 }}>Scan to Pay via UPI</Text>
+              <View style={{ backgroundColor: '#fff', padding: 12, borderRadius: 16 }}>
+                <Image source={{ uri: qrCode }} style={{ width: 220, height: 220 }} resizeMode="contain" />
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.settleBtn, styles.upiBtn, loading && styles.btnDisabled]}
+              onPress={handleSettleUPI}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="qr-code-outline" size={20} color="#fff" />
+                  <Text style={styles.settleBtnText}>Generate UPI QR</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )
         ) : (
           <TouchableOpacity
             style={styles.settleBtn}

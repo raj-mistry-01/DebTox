@@ -6,6 +6,7 @@ import balanceRouter from './balance.router.js';
 import activityRouter from './activity.router.js';
 import friendRouter from './friend.router.js';
 import notificationRouter from './notification.router.js';
+import uropayRouter from './uropay.router.js';
 
 const apiRouter = Router();
 
@@ -20,5 +21,6 @@ apiRouter.use('/balances', balanceRouter);
 apiRouter.use('/friends', friendRouter);
 apiRouter.use('/notifications', notificationRouter);
 apiRouter.use('/activity', activityRouter);
+apiRouter.use('/payments', uropayRouter);
 
 export default apiRouter;

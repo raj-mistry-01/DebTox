@@ -102,7 +102,7 @@ export function useFriends(refreshTrigger?: number) {
   const fetchFriends = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getFriendsList();
+      const response = await apiClient.getBalances();
       setFriends(response.friends || []);
       setError(null);
     } catch (err) {
@@ -145,4 +145,44 @@ export function useActivity(refreshTrigger?: number) {
   }, [fetchActivity, refreshTrigger]);
 
   return { activities, loading, error, refetch: fetchActivity };
+}
+
+// Simplified Debts Hook
+export function useSimplifiedDebts(groupId: string, forceRecalculate = false) {
+  const [debts, setDebts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<any>(null);
+
+  const fetchSimplifiedDebts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getSimplifiedDebts(groupId, forceRecalculate);
+      setDebts(response.simplifiedDebts || []);
+      setStats({
+        totalTransactions: response.totalTransactions,
+        originalTransactions: response.originalTransactions,
+        savingsPercentage: response.savingsPercentage,
+        calculatedAt: response.calculatedAt,
+        source: response.source,
+      });
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch simplified debts');
+      setDebts([]);
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [groupId, forceRecalculate]);
+
+  useEffect(() => {
+    if (!groupId) {
+      setLoading(false);
+      return;
+    }
+    fetchSimplifiedDebts();
+  }, [groupId, forceRecalculate, fetchSimplifiedDebts]);
+
+  return { debts, loading, error, stats, refetch: fetchSimplifiedDebts };
 }

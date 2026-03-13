@@ -12,20 +12,21 @@ async function getNotificationsList(req, res) {
     const userId = req.user.sub;
     const { limit = 20, offset = 0 } = req.query;
 
-    const notifications = await getNotifications(
+    const result = await getNotifications(
       userId,
       parseInt(limit),
       parseInt(offset)
     );
 
-    if (!notifications) {
+    if (!result || !result.notifications) {
       return res.status(200).json({ notifications: [] });
     }
 
     return res.status(200).json({
-      notifications: notifications.sort(
+      notifications: result.notifications.sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       ),
+      total: result.total,
     });
   } catch (error) {
     return res.status(500).json({

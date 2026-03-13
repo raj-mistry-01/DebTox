@@ -8,6 +8,7 @@ import initBalanceModel from './balance.model.js';
 import initPaymentModel from './payment.model.js';
 import initFriendRequestModel from './friendRequest.model.js';
 import initNotificationModel from './notification.model.js';
+import initOptimizedTransactionModel from './optimizedTransaction.model.js';
 
 const User = initUserModel(sequelize);
 const Group = initGroupModel(sequelize);
@@ -18,6 +19,7 @@ const Balance = initBalanceModel(sequelize);
 const Payment = initPaymentModel(sequelize);
 const FriendRequest = initFriendRequestModel(sequelize);
 const Notification = initNotificationModel(sequelize);
+const OptimizedTransaction = initOptimizedTransactionModel(sequelize);
 
 Group.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
 User.hasMany(Group, { foreignKey: 'createdBy', as: 'createdGroups' });
@@ -55,6 +57,12 @@ Notification.belongsTo(User, { foreignKey: 'userId', as: 'recipient' });
 Notification.belongsTo(User, { foreignKey: 'relatedUserId', as: 'relatedUser' });
 User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' });
 
+// Optimized Transaction relationships
+OptimizedTransaction.belongsTo(Group, { foreignKey: 'groupId' });
+OptimizedTransaction.belongsTo(User, { foreignKey: 'fromUserId', as: 'debtor' });
+OptimizedTransaction.belongsTo(User, { foreignKey: 'toUserId', as: 'creditor' });
+Group.hasMany(OptimizedTransaction, { foreignKey: 'groupId', as: 'optimizedTransactions' });
+
 export {
   sequelize,
   User,
@@ -66,4 +74,5 @@ export {
   Payment,
   FriendRequest,
   Notification,
+  OptimizedTransaction,
 };

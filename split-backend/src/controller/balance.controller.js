@@ -1,4 +1,4 @@
-import { Balance, User, GroupMember, Payment, Group, Expense, ExpenseShare } from '../model/index.js';
+import { Balance, User, GroupMember, Payment, Group, Expense, ExpenseShare, FriendRequest } from '../model/index.js';
 import sequelize from '../db/sequelize.js';
 import { Op } from 'sequelize';
 
@@ -6,7 +6,7 @@ async function getFriends(req, res) {
   try {
     const userId = req.user.sub;
 
-    // Get all balances involving this user
+    // First, get all balances involving this user
     const balances = await Balance.findAll({
       where: {
         [Op.or]: [{ fromUserId: userId }, { toUserId: userId }],
@@ -18,9 +18,26 @@ async function getFriends(req, res) {
       raw: false,
     });
 
+    // Get all accepted friends from FriendRequest table
+    const friendRequests = await FriendRequest.findAll({
+      where: {
+        status: 'accepted',
+        [Op.or]: [
+          { fromUserId: userId },
+          { toUserId: userId },
+        ],
+      },
+      include: [
+        { model: User, as: 'sender', attributes: ['id', 'name', 'email', 'phone'] },
+        { model: User, as: 'receiver', attributes: ['id', 'name', 'email', 'phone'] },
+      ],
+      raw: false,
+    });
+
     // Aggregate by friend
     const friendMap = new Map();
 
+    // Add friends from balances
     balances.forEach((b) => {
       const isDebtor = b.fromUserId === userId;
       const friend = isDebtor ? b.creditor : b.debtor;
@@ -37,6 +54,16 @@ async function getFriends(req, res) {
         current.balance -= amount; // We owe
       } else {
         current.balance += amount; // They owe us
+      }
+    });
+
+    // Add friends from accepted friend requests
+    friendRequests.forEach((fr) => {
+      const friend = fr.fromUserId === userId ? fr.receiver : fr.sender;
+      const friendId = friend.id;
+
+      if (!friendMap.has(friendId)) {
+        friendMap.set(friendId, { user: friend, balance: 0 });
       }
     });
 

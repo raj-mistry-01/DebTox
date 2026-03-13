@@ -1,36 +1,106 @@
-import { MOCK_EXPENSES, MOCK_GROUPS } from '@/data/mockData';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
+    ActivityIndicator,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
+    Alert,
 } from 'react-native';
+import { apiClient } from '@/services/api';
+import { Group, Expense } from '@/types';
+import SimplifiedDebtView from '@/components/SimplifiedDebtView';
 
 export default function GroupDetailScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const group = MOCK_GROUPS.find((g) => g.id === groupId) ?? MOCK_GROUPS[0];
-  const expenses = MOCK_EXPENSES.filter((e) => e.groupId === group.id);
+  const [group, setGroup] = useState<Group | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showSimplifiedDebts, setShowSimplifiedDebts] = useState(false);
+
+  const fetchGroupDetails = useCallback(async () => {
+    if (!groupId) {
+      setError('No group ID provided');
+      console.warn('No groupId in route params');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('Fetching group details for groupId:', groupId);
+      
+      const groupRes = await apiClient.getGroup(groupId);
+      console.log('Group response:', groupRes);
+      
+      // Backend returns the group data directly
+      if (!groupRes || !groupRes.id) {
+        setError('Invalid group data received');
+        console.error('No group ID in response:', groupRes);
+        return;
+      }
+
+      setGroup(groupRes);
+      setExpenses(groupRes.expenses || []);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load group';
+      console.error('Group fetch error:', errorMsg, err);
+      setError(errorMsg);
+      Alert.alert('Error', errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [groupId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchGroupDetails();
+    }, [fetchGroupDetails])
+  );
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#e94560" />
+      </View>
+    );
+  }
+
+  if (error || !group) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.empty}>{error || 'Group not found'}</Text>
+        <TouchableOpacity
+          style={styles.retryBtn}
+          onPress={fetchGroupDetails}
+        >
+          <Text style={styles.retryBtnText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
       {/* Group header */}
       <View style={styles.header}>
-        <Text style={styles.headerEmoji}>{group.emoji ?? '👥'}</Text>
+        <Text style={styles.headerEmoji}>👥</Text>
         <Text style={styles.headerTitle}>{group.name}</Text>
-        <Text style={styles.headerSub}>{group.members.length} members</Text>
+        <Text style={styles.headerSub}>{group.members?.length || 0} members</Text>
 
         {/* Net balance */}
         <View style={styles.balanceBadge}>
           {group.netBalance > 0 ? (
             <Text style={[styles.balanceText, { color: '#4ade80' }]}>
-              You are owed ${group.netBalance.toFixed(2)}
+              You are owed ₹{Math.abs(group.netBalance).toFixed(2)}
             </Text>
           ) : group.netBalance < 0 ? (
             <Text style={[styles.balanceText, { color: '#f87171' }]}>
-              You owe ${Math.abs(group.netBalance).toFixed(2)}
+              You owe ₹{Math.abs(group.netBalance).toFixed(2)}
             </Text>
           ) : (
             <Text style={[styles.balanceText, { color: '#888' }]}>All settled up</Text>
@@ -41,7 +111,7 @@ export default function GroupDetailScreen() {
       {/* Members */}
       <Text style={styles.sectionTitle}>Members</Text>
       <View style={styles.membersRow}>
-        {group.members.map((m) => {
+        {group.members && group.members.map((m) => {
           const initials = m.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
           return (
             <View key={m.id} style={styles.memberItem}>
@@ -54,12 +124,36 @@ export default function GroupDetailScreen() {
         })}
       </View>
 
+      {/* Simplified Debts Section */}
+      <View style={styles.simplifySectionContainer}>
+        <TouchableOpacity
+          style={styles.simplifyToggleBtn}
+          onPress={() => setShowSimplifiedDebts(!showSimplifiedDebts)}
+        >
+          <View style={styles.simplifyHeader}>
+            <Ionicons name="shuffle" size={18} color="#4ade80" />
+            <Text style={styles.simplifyTitle}>Simplified Settlement</Text>
+          </View>
+          <Ionicons 
+            name={showSimplifiedDebts ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color="#888"
+          />
+        </TouchableOpacity>
+        
+        {showSimplifiedDebts && (
+          <View style={styles.simplifyContent}>
+            <SimplifiedDebtView groupId={groupId} />
+          </View>
+        )}
+      </View>
+
       {/* Expenses */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Expenses</Text>
         <TouchableOpacity
           style={styles.addExpBtn}
-          onPress={() => router.push('/expenses/new')}
+          onPress={() => router.push(`/expenses/new?groupId=${groupId}`)}
         >
           <Ionicons name="add" size={16} color="#e94560" />
           <Text style={styles.addExpText}>Add</Text>
@@ -88,18 +182,12 @@ export default function GroupDetailScreen() {
               </View>
             </View>
             <View style={styles.expenseRight}>
-              <Text style={styles.expAmount}>${exp.amount.toFixed(2)}</Text>
-              <Text style={styles.expPaidBy}>paid by {exp.paidBy.name.split(' ')[0]}</Text>
+              <Text style={styles.expAmount}>₹{exp.amount.toFixed(2)}</Text>
+              <Text style={styles.expPaidBy}>paid by {exp.paidBy?.name?.split(' ')[0] || 'Unknown'}</Text>
             </View>
           </TouchableOpacity>
         ))
       )}
-
-      {/* Simplify debts */}
-      <TouchableOpacity style={styles.simplifyBtn}>
-        <Ionicons name="git-merge-outline" size={18} color="#7c3aed" />
-        <Text style={styles.simplifyText}>Simplify debts</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -182,18 +270,45 @@ const styles = StyleSheet.create({
   expenseRight: { alignItems: 'flex-end' },
   expAmount: { color: '#fff', fontWeight: '700', fontSize: 16 },
   expPaidBy: { color: '#666', fontSize: 11, marginTop: 2 },
-  simplifyBtn: {
+  empty: { color: '#666', textAlign: 'center', padding: 24, fontSize: 14 },
+  retryBtn: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: '#e94560',
+    borderRadius: 8,
+  },
+  retryBtnText: { color: '#fff', fontWeight: '600' },
+  simplifySectionContainer: {
+    marginTop: 20,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+    overflow: 'hidden',
+  },
+  simplifyToggleBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  simplifyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    margin: 16,
-    padding: 14,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#7c3aed44',
+    gap: 10,
   },
-  simplifyText: { color: '#7c3aed', fontWeight: '700', fontSize: 15 },
-  empty: { color: '#666', textAlign: 'center', padding: 24, fontSize: 14 },
+  simplifyTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  simplifyContent: {
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a3e',
+    paddingHorizontal: 0,
+    maxHeight: 500,
+  },
 });

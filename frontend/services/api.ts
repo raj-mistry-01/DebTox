@@ -18,7 +18,8 @@ export class ApiClient {
     options: RequestInit = {}
   ) {
     const url = `${BACKEND_URL}/api/v1${endpoint}`;
-    console.log(url)
+    console.log('API Request:', { url, method: options.method || 'GET', token: this.token ? 'Bearer ...' : 'None' });
+    
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -28,17 +29,28 @@ export class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `API Error: ${response.statusText}`);
+      console.log('API Response:', { url, status: response.status, statusText: response.statusText });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const errorMsg = error.message || `API Error: ${response.statusText}`;
+        console.error('API Error Details:', { status: response.status, errorMsg, fullError: error });
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      console.log('API Response Data:', { endpoint, dataKeys: Object.keys(data) });
+      return data;
+    } catch (err) {
+      console.error('API Request Failed:', { url, error: err instanceof Error ? err.message : err });
+      throw err;
     }
-
-    return response.json();
   }
 
   // Auth endpoints
@@ -90,7 +102,7 @@ export class ApiClient {
 
   // Expense endpoints
   async createExpense(
-    groupId: string,
+    groupId: string | null,
     title: string,
     amount: number,
     splits: { userId: string | number; shareAmount: number }[],
@@ -204,6 +216,28 @@ export class ApiClient {
   // Activity endpoints
   async getActivity() {
     return this.request('/activity');
+  }
+
+  // Debt Simplification endpoints
+  async getSimplifiedDebts(groupId: string, forceRecalculate = false) {
+    return this.request(`/debts/${groupId}/simplified?forceRecalculate=${forceRecalculate}`);
+  }
+
+  async compareDebts(groupId: string) {
+    return this.request(`/debts/${groupId}/comparison`);
+  }
+
+  async markSettlementAsPaid(groupId: string, settlementId: string, paymentMethod = 'manual') {
+    return this.request(`/debts/${groupId}/settlement/${settlementId}/mark-paid`, {
+      method: 'POST',
+      body: JSON.stringify({ paymentMethod }),
+    });
+  }
+
+  async invalidateDebtCache(groupId: string) {
+    return this.request(`/debts/${groupId}/cache`, {
+      method: 'DELETE',
+    });
   }
 }
 

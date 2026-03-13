@@ -1,8 +1,7 @@
-import { MOCK_FRIENDS } from '@/data/mockData';
 import { Friend } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
 import {
     FlatList,
     StyleSheet,
@@ -10,10 +9,9 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    Modal,
-    KeyboardAvoidingView,
-    Platform,
+    ActivityIndicator,
 } from 'react-native';
+import { useFriends } from '@/hooks/useApi';
 
 function FriendCard({ friend }: { friend: Friend }) {
   const balance = friend.balance;
@@ -49,12 +47,14 @@ function FriendCard({ friend }: { friend: Friend }) {
       </View>
       <View style={styles.cardRight}>
         <Text style={[styles.balance, { color: balanceColor }]}>{balanceLabel}</Text>
-        <TouchableOpacity
-          style={styles.settleBtn}
-          onPress={() => router.push(`/settle/${friend.user.id}`)}
-        >
-          <Text style={styles.settleBtnText}>Settle</Text>
-        </TouchableOpacity>
+        {balance !== 0 && (
+          <TouchableOpacity
+            style={styles.settleBtn}
+            onPress={() => router.push(`/settle/${friend.user.id}`)}
+          >
+            <Text style={styles.settleBtnText}>Settle</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -62,32 +62,37 @@ function FriendCard({ friend }: { friend: Friend }) {
 
 export default function FriendsScreen() {
   const [search, setSearch] = useState('');
-  const [isAddModalVisible, setAddModalVisible] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [dummyRefresh, setDummyRefresh] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { friends, loading, error, refetch } = useFriends(refreshKey);
 
-  const filtered = MOCK_FRIENDS.filter((f) =>
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  const filtered = friends.filter((f) =>
     f.user.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAddFriend = () => {
-    if (!newName.trim()) return;
-    const newFriend: Friend = {
-      id: `friend-${Date.now()}`,
-      user: {
-        id: `user-${Date.now()}`,
-        name: newName.trim(),
-        email: newEmail.trim().toLowerCase(),
-      },
-      balance: 0,
-    };
-    MOCK_FRIENDS.push(newFriend);
-    setNewName('');
-    setNewEmail('');
-    setAddModalVisible(false);
-    setDummyRefresh((prev) => prev + 1);
+  const totalOwedByFriends = friends.reduce((sum, f) => (f.balance > 0 ? sum + f.balance : sum), 0);
+  const totalOweToFriends = friends.reduce((sum, f) => (f.balance < 0 ? sum + Math.abs(f.balance) : sum), 0);
+
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1);
   };
+
+  if (error && !loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.errorText}>Error loading friends</Text>
+        <Text style={styles.errorSubtext}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={handleRefresh}>
+          <Text style={styles.retryBtnText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -102,94 +107,44 @@ export default function FriendsScreen() {
             placeholderTextColor="#555"
           />
         </View>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => setAddModalVisible(true)}
-        >
-          <Ionicons name="person-add" size={20} color="#fff" />
-        </TouchableOpacity>
       </View>
 
       {/* Overall balance banner */}
       <View style={styles.banner}>
         <View style={styles.bannerItem}>
           <Text style={styles.bannerLabel}>Friends owe you</Text>
-          <Text style={[styles.bannerValue, { color: '#4ade80' }]}>$42.50</Text>
+          <Text style={[styles.bannerValue, { color: '#4ade80' }]}>${totalOwedByFriends.toFixed(2)}</Text>
         </View>
         <View style={styles.bannerDivider} />
         <View style={styles.bannerItem}>
           <Text style={styles.bannerLabel}>You owe friends</Text>
-          <Text style={[styles.bannerValue, { color: '#f87171' }]}>$150.00</Text>
+          <Text style={[styles.bannerValue, { color: '#f87171' }]}>${totalOweToFriends.toFixed(2)}</Text>
         </View>
       </View>
 
-      <FlatList
-        data={filtered}
-        extraData={dummyRefresh}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <FriendCard friend={item} />}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-        ListEmptyComponent={<Text style={styles.empty}>No friends found.</Text>}
-      />
-
-      <Modal
-        visible={isAddModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setAddModalVisible(false)}
-      >
-        <KeyboardAvoidingView 
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New Friend</Text>
-              <TouchableOpacity onPress={() => setAddModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#888" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Name</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Ex. Jane Doe"
-                placeholderTextColor="#555"
-                value={newName}
-                onChangeText={setNewName}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email (Optional)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Ex. jane@example.com"
-                placeholderTextColor="#555"
-                value={newEmail}
-                onChangeText={setNewEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, !newName.trim() && { opacity: 0.5 }]}
-              onPress={handleAddFriend}
-              disabled={!newName.trim()}
-            >
-              <Text style={styles.saveBtnText}>Add Friend</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {loading ? (
+        <View style={[styles.list, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#e94560" />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <FriendCard friend={item} />}
+          contentContainerStyle={styles.list}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {search ? 'No friends found.' : 'No friends yet.'}
+            </Text>
+          }
+          refreshing={loading}
+          onRefresh={handleRefresh}
+        />
+      )}
     </View>
   );
 }
-
-const AVATAR_COLORS = ['#e94560', '#7c3aed', '#0ea5e9', '#10b981', '#f59e0b'];
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f0f1a' },
@@ -212,14 +167,6 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a3e',
   },
   searchInput: { flex: 1, color: '#fff', fontSize: 15 },
-  addBtn: {
-    backgroundColor: '#e94560',
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   banner: {
     flexDirection: 'row',
     backgroundColor: '#1a1a2e',
@@ -245,7 +192,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a3e',
   },
-  cardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   avatar: {
     width: 44,
     height: 44,
@@ -269,44 +216,8 @@ const styles = StyleSheet.create({
   },
   settleBtnText: { color: '#4ade80', fontSize: 11, fontWeight: '700' },
   empty: { color: '#666', textAlign: 'center', marginTop: 40, fontSize: 15 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a3e',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  inputGroup: { marginBottom: 16 },
-  inputLabel: { color: '#888', fontSize: 13, marginBottom: 8, fontWeight: '600' },
-  modalInput: {
-    backgroundColor: '#0f0f1a',
-    borderRadius: 12,
-    padding: 14,
-    color: '#fff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#2a2a3e',
-  },
-  saveBtn: {
-    backgroundColor: '#e94560',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: Platform.OS === 'ios' ? 24 : 0,
-  },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  errorText: { color: '#f87171', fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  errorSubtext: { color: '#888', fontSize: 14, marginBottom: 16 },
+  retryBtn: { backgroundColor: '#e94560', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 },
+  retryBtnText: { color: '#fff', fontWeight: '600' },
 });

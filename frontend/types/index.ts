@@ -3,6 +3,8 @@ export interface User {
   name: string;
   email: string;
   avatarUrl?: string;
+  phone?: string;
+  upiId?: string;
 }
 
 export interface Group {
@@ -29,6 +31,27 @@ export interface Friend {
   id: string;
   user: User;
   balance: number; // positive = they owe you, negative = you owe them
+}
+
+export interface FriendRequest {
+  id: string;
+  sender: User;
+  receiver: User;
+  status: 'pending' | 'accepted' | 'rejected';
+  message?: string;
+  createdAt: string;
+  respondedAt?: string;
+}
+
+export interface Notification {
+  id: string;
+  type: 'friend_request' | 'friend_accepted' | 'expense_added' | 'payment_received';
+  title: string;
+  message: string;
+  isRead: boolean;
+  relatedUser?: User;
+  relatedId?: string;
+  createdAt: string;
 }
 
 export interface Activity {

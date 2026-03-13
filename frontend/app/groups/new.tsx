@@ -1,9 +1,12 @@
-import { MOCK_USERS } from '@/data/mockData';
+import { apiClient } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -12,80 +15,372 @@ import {
     View,
 } from 'react-native';
 
-export default function NewGroupScreen() {
-  const [groupName, setGroupName] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+type Step = 'details' | 'members' | 'review';
 
-  const toggleMember = (id: string) => {
-    setSelectedMembers((prev) =>
-      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
-    );
+const CURRENCY_OPTIONS = [
+    { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
+    { code: 'USD', name: 'US Dollar', symbol: '$' },
+    { code: 'EUR', name: 'Euro', symbol: '€' },
+    { code: 'GBP', name: 'British Pound', symbol: '£' },
+    { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
+    { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$' },
+];
+
+export default function NewGroupScreen() {
+  const [step, setStep] = useState<Step>('details');
+  const [groupName, setGroupName] = useState('');
+  const [description, setDescription] = useState('');
+  const [currency, setCurrency] = useState('INR');
+  const [memberEmail, setMemberEmail] = useState('');
+  const [members, setMembers] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const validateGroupDetails = () => {
+    if (!groupName.trim() || groupName.trim().length < 2) {
+      Alert.alert('Error', 'Group name must be at least 2 characters.');
+      return false;
+    }
+    return true;
   };
 
-  const handleCreate = () => {
-    if (!groupName.trim()) {
-      Alert.alert('Error', 'Please enter a group name.');
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const handleAddMember = () => {
+    const email = memberEmail.trim().toLowerCase();
+    
+    if (!email) {
+      Alert.alert('Error', 'Please enter an email address.');
       return;
     }
-    Alert.alert('Group created!', `"${groupName}" with ${selectedMembers.length + 1} members.`, [
-      { text: 'OK', onPress: () => router.back() },
-    ]);
+
+    if (!isValidEmail(email)) {
+      Alert.alert('Error', 'Please enter a valid email address.');
+      return;
+    }
+
+    if (members.includes(email)) {
+      Alert.alert('Error', 'This email is already added.');
+      return;
+    }
+
+    setMembers([...members, email]);
+    setMemberEmail('');
   };
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.inner}>
-      <Text style={styles.sectionTitle}>Group Name</Text>
-      <TextInput
-        style={styles.input}
-        value={groupName}
-        onChangeText={setGroupName}
-        placeholder="e.g. Barcelona Trip 🏖️"
-        placeholderTextColor="#555"
-      />
+  const handleRemoveMember = (email: string) => {
+    setMembers(members.filter(m => m !== email));
+  };
 
-      <Text style={styles.sectionTitle}>Add Members</Text>
-      {MOCK_USERS.slice(1).map((user) => {
-        const selected = selectedMembers.includes(user.id);
-        const initials = user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-        return (
+  const handleCreateGroup = async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.createGroup(
+        groupName.trim(),
+        description.trim() || undefined,
+        currency,
+        members
+      );
+
+      Alert.alert('Success', 'Group created successfully!', [
+        {
+          text: 'OK',
+          onPress: () => {
+            router.replace('/(tabs)/groups');
+          },
+        },
+      ]);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create group. Please try again.');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 1: Group Details
+  if (step === 'details') {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.title}>Create a Group</Text>
+            <Text style={styles.subtitle}>Step 1 of 3: Group Details</Text>
+          </View>
+
+          <View style={styles.form}>
+            <Text style={styles.label}>Group Name *</Text>
+            <TextInput
+              style={styles.input}
+              value={groupName}
+              onChangeText={setGroupName}
+              placeholder="e.g., Weekend Trip"
+              placeholderTextColor="#555"
+              autoCapitalize="words"
+            />
+
+            <Text style={styles.label}>Description</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="e.g., Accommodation, food, activities..."
+              placeholderTextColor="#555"
+              multiline
+              numberOfLines={3}
+            />
+
+            <Text style={styles.label}>Currency *</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.currencyScroll}
+            >
+              {CURRENCY_OPTIONS.map((cur) => (
+                <TouchableOpacity
+                  key={cur.code}
+                  style={[
+                    styles.currencyButton,
+                    currency === cur.code && styles.currencyButtonActive,
+                  ]}
+                  onPress={() => setCurrency(cur.code)}
+                >
+                  <Text style={styles.currencySymbol}>{cur.symbol}</Text>
+                  <Text style={[
+                    styles.currencyCode,
+                    currency === cur.code && { color: '#fff' },
+                  ]}>
+                    {cur.code}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.nextButton}
+              onPress={() => {
+                if (validateGroupDetails()) {
+                  setStep('members');
+                }
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.nextButtonText}>Next: Add Members</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Step 2: Add Members
+  if (step === 'members') {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.title}>Add Members</Text>
+            <Text style={styles.subtitle}>Step 2 of 3: Invite Friends</Text>
+          </View>
+
+          <View style={styles.form}>
+            <Text style={styles.label}>Member Email</Text>
+            <View style={styles.inputGroup}>
+              <TextInput
+                style={styles.input}
+                value={memberEmail}
+                onChangeText={setMemberEmail}
+                placeholder="friend@example.com"
+                placeholderTextColor="#555"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={handleAddMember}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {members.length > 0 && (
+              <View style={styles.membersList}>
+                <Text style={styles.label}>Added Members ({members.length})</Text>
+                {members.map((email, index) => (
+                  <View key={index} style={styles.memberItem}>
+                    <View style={styles.memberInfo}>
+                      <Ionicons name="person-circle" size={28} color="#e94560" />
+                      <Text style={styles.memberEmail}>{email}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveMember(email)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#666" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Text style={styles.hint}>
+              {members.length === 0
+                ? 'Add members by email. You can add more after creating the group.'
+                : `${members.length} member(s) added`}
+            </Text>
+
+            <View style={styles.buttonGroup}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => setStep('details')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="arrow-back" size={18} color="#e94560" />
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.nextButton}
+                onPress={() => setStep('review')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.nextButtonText}>Review</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Step 3: Review & Create
+  if (step === 'review') {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.inner}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Review Group</Text>
+          <Text style={styles.subtitle}>Step 3 of 3: Create</Text>
+        </View>
+
+        <View style={styles.reviewCard}>
+          <View style={styles.reviewRow}>
+            <Text style={styles.reviewLabel}>Group Name</Text>
+            <Text style={styles.reviewValue}>{groupName}</Text>
+          </View>
+
+          {description && (
+            <View style={styles.reviewRow}>
+              <Text style={styles.reviewLabel}>Description</Text>
+              <Text style={styles.reviewValue}>{description}</Text>
+            </View>
+          )}
+
+          <View style={styles.reviewRow}>
+            <Text style={styles.reviewLabel}>Currency</Text>
+            <Text style={styles.reviewValue}>
+              {CURRENCY_OPTIONS.find(c => c.code === currency)?.name} ({currency})
+            </Text>
+          </View>
+
+          <View style={[styles.reviewRow, styles.reviewRowNoBottom]}>
+            <Text style={styles.reviewLabel}>Members</Text>
+            <Text style={styles.reviewValue}>{members.length + 1} (including you)</Text>
+          </View>
+        </View>
+
+        {members.length > 0 && (
+          <View style={styles.membersList}>
+            <Text style={styles.label}>Group Members</Text>
+            <View style={styles.memberItem}>
+              <View style={styles.memberInfo}>
+                <Ionicons name="person-circle" size={28} color="#e94560" />
+                <View>
+                  <Text style={styles.memberEmail}>You (Admin)</Text>
+                </View>
+              </View>
+            </View>
+            {members.map((email, index) => (
+              <View key={index} style={styles.memberItem}>
+                <View style={styles.memberInfo}>
+                  <Ionicons name="person-circle" size={28} color="#888" />
+                  <Text style={styles.memberEmail}>{email}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.buttonGroup}>
           <TouchableOpacity
-            key={user.id}
-            style={[styles.memberRow, selected && styles.memberRowSelected]}
-            onPress={() => toggleMember(user.id)}
-            activeOpacity={0.75}
+            style={styles.backButton}
+            onPress={() => setStep('members')}
+            disabled={loading}
+            activeOpacity={0.85}
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.memberName}>{user.name}</Text>
-              <Text style={styles.memberEmail}>{user.email}</Text>
-            </View>
-            <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
-              {selected && <Ionicons name="checkmark" size={14} color="#fff" />}
-            </View>
+            <Ionicons name="arrow-back" size={18} color="#e94560" />
+            <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
-        );
-      })}
 
-      <TouchableOpacity style={styles.createBtn} onPress={handleCreate} activeOpacity={0.85}>
-        <Text style={styles.createBtnText}>Create Group</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
+          <TouchableOpacity
+            style={[styles.createButton, loading && styles.buttonDisabled]}
+            onPress={handleCreateGroup}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.createButtonText}>Create Group</Text>
+                <Ionicons name="checkmark-done" size={18} color="#fff" />
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f0f1a' },
-  inner: { padding: 20, paddingBottom: 60 },
-  sectionTitle: {
+  inner: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 28,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#888',
+  },
+  form: { gap: 4 },
+  label: {
     color: '#ccc',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 16,
     marginBottom: 8,
-    marginTop: 20,
   },
   input: {
     backgroundColor: '#1a1a2e',
@@ -97,49 +392,170 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  currencyScroll: {
+    marginVertical: 8,
+  },
+  currencyButton: {
     backgroundColor: '#1a1a2e',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#2a2a3e',
-    gap: 12,
-  },
-  memberRowSelected: { borderColor: '#e94560' },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#e94560',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  memberName: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  memberEmail: { color: '#666', fontSize: 12, marginTop: 1 },
-  checkbox: {
-    width: 24,
-    height: 24,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#444',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  currencyButtonActive: {
+    backgroundColor: '#e94560',
+    borderColor: '#e94560',
+  },
+  currencySymbol: {
+    color: '#e94560',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  currencyCode: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  inputGroup: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  addButton: {
+    backgroundColor: '#e94560',
+    borderRadius: 12,
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  membersList: {
+    marginTop: 16,
+  },
+  memberItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  memberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  memberEmail: {
+    color: '#ddd',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  hint: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 8,
+  },
+  reviewCard: {
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+    borderRadius: 16,
+    padding: 16,
+    marginVertical: 16,
+  },
+  reviewRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a3e',
+  },
+  reviewRowNoBottom: {
+    borderBottomWidth: 0,
+  },
+  reviewLabel: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  reviewValue: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  backButton: {
+    flexDirection: 'row',
+    flex: 1,
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#e94560',
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
-  checkboxSelected: { backgroundColor: '#e94560', borderColor: '#e94560' },
-  createBtn: {
+  backButtonText: {
+    color: '#e94560',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  nextButton: {
+    flexDirection: 'row',
+    flex: 1,
     backgroundColor: '#e94560',
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 28,
+    justifyContent: 'center',
+    gap: 8,
     shadowColor: '#e94560',
     shadowOpacity: 0.4,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
   },
-  createBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  nextButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  createButton: {
+    flexDirection: 'row',
+    flex: 1,
+    backgroundColor: '#00c853',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#00c853',
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
 });

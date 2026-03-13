@@ -1,8 +1,7 @@
-import { MOCK_GROUPS } from '@/data/mockData';
 import { Group } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
 import {
     FlatList,
     StyleSheet,
@@ -10,7 +9,9 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    ActivityIndicator,
 } from 'react-native';
+import { useGroups } from '@/hooks/useApi';
 
 function GroupCard({ group }: { group: Group }) {
   const balance = group.netBalance;
@@ -35,7 +36,7 @@ function GroupCard({ group }: { group: Group }) {
         <View>
           <Text style={styles.groupName}>{group.name}</Text>
           <Text style={styles.memberCount}>
-            {group.members.length} members
+            {group.members?.length || 0} members
           </Text>
         </View>
       </View>
@@ -48,9 +49,38 @@ function GroupCard({ group }: { group: Group }) {
 
 export default function GroupsScreen() {
   const [search, setSearch] = useState('');
-  const filtered = MOCK_GROUPS.filter((g) =>
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { groups, loading, error, refetch } = useGroups(refreshKey);
+
+  // Refetch when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  const filtered = groups.filter((g) =>
     g.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const totalOwed = groups.reduce((sum, g) => (g.netBalance > 0 ? sum + g.netBalance : sum), 0);
+  const totalOwe = groups.reduce((sum, g) => (g.netBalance < 0 ? sum + Math.abs(g.netBalance) : sum), 0);
+
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1);
+  };
+
+  if (error && !loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.errorText}>Error loading groups</Text>
+        <Text style={styles.errorSubtext}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={handleRefresh}>
+          <Text style={styles.retryBtnText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -78,24 +108,32 @@ export default function GroupsScreen() {
       <View style={styles.summaryRow}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Total owed</Text>
-          <Text style={[styles.summaryValue, { color: '#4ade80' }]}>$58.25</Text>
+          <Text style={[styles.summaryValue, { color: '#4ade80' }]}>${totalOwed.toFixed(2)}</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>You owe</Text>
-          <Text style={[styles.summaryValue, { color: '#f87171' }]}>$150.00</Text>
+          <Text style={[styles.summaryValue, { color: '#f87171' }]}>${totalOwe.toFixed(2)}</Text>
         </View>
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <GroupCard group={item} />}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No groups found.</Text>
-        }
-      />
+      {loading ? (
+        <View style={[styles.list, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#e94560" />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => <GroupCard group={item} />}
+          contentContainerStyle={styles.list}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <Text style={styles.empty}>{search ? 'No groups found.' : 'No groups yet. Create one to get started!'}</Text>
+          }
+          refreshing={loading}
+          onRefresh={handleRefresh}
+        />
+      )}
     </View>
   );
 }
@@ -172,4 +210,8 @@ const styles = StyleSheet.create({
   cardRight: { alignItems: 'flex-end' },
   balance: { fontSize: 12, fontWeight: '600' },
   empty: { color: '#666', textAlign: 'center', marginTop: 40, fontSize: 15 },
+  errorText: { color: '#f87171', fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  errorSubtext: { color: '#888', fontSize: 14, marginBottom: 16 },
+  retryBtn: { backgroundColor: '#e94560', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 },
+  retryBtnText: { color: '#fff', fontWeight: '600' },
 });

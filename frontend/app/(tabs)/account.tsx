@@ -1,6 +1,7 @@
 import { useAuth } from '@/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
     Alert,
     ScrollView,
@@ -9,16 +10,34 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { apiClient } from '@/services/api';
 
 type SettingRow = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   danger?: boolean;
+  badge?: number;
 };
 
 export default function AccountScreen() {
   const { currentUser, logout } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await apiClient.getUnreadNotificationCount();
+      setUnreadCount(response.unreadCount || 0);
+    } catch (error) {
+      console.error('Failed to fetch unread count:', error);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
@@ -38,12 +57,23 @@ export default function AccountScreen() {
     {
       icon: 'person-outline',
       label: 'Edit profile',
-      onPress: () => Alert.alert('Coming soon', 'Profile editing not yet implemented.'),
+      onPress: () => router.push('/edit-profile'),
+    },
+    {
+      icon: 'heart-outline',
+      label: 'Add friends',
+      onPress: () => router.push('/friends/add'),
+    },
+    {
+      icon: 'mail-outline',
+      label: 'Friend requests',
+      onPress: () => router.push('/friends/requests'),
     },
     {
       icon: 'notifications-outline',
       label: 'Notifications',
-      onPress: () => Alert.alert('Coming soon'),
+      onPress: () => router.push('/notifications'),
+      badge: unreadCount,
     },
     {
       icon: 'card-outline',
@@ -128,9 +158,18 @@ export default function AccountScreen() {
                 {s.label}
               </Text>
             </View>
-            {!s.danger && (
-              <Ionicons name="chevron-forward" size={16} color="#444" />
-            )}
+            <View style={styles.settingRight}>
+              {s.badge && s.badge > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {s.badge > 99 ? '99+' : s.badge}
+                  </Text>
+                </View>
+              )}
+              {!s.danger && (
+                <Ionicons name="chevron-forward" size={16} color="#444" />
+              )}
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -206,6 +245,16 @@ const styles = StyleSheet.create({
   },
   settingRowBorder: { borderTopWidth: 1, borderTopColor: '#2a2a3e' },
   settingLeft: { flexDirection: 'row', alignItems: 'center' },
+  settingRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   settingLabel: { color: '#ddd', fontSize: 15 },
+  notificationBadge: {
+    backgroundColor: '#e94560',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  notificationBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   version: { color: '#333', textAlign: 'center', marginTop: 28, fontSize: 12 },
 });

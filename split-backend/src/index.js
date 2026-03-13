@@ -11,14 +11,26 @@ import initializeModels from './model/initModels.js';
 
 async function startServer() {
 	try {
-		// await initializeModels({ alter: false });
+		// Initialize database tables on startup with timeout
+		// alter: true will add missing columns to existing tables
+		const dbInitPromise = initializeModels({ alter: true });
+		const timeoutPromise = new Promise((_, reject) => 
+			setTimeout(() => reject(new Error('Database initialization timeout')), 15000)
+		);
+
+		await Promise.race([dbInitPromise, timeoutPromise]);
+		console.log('Database synchronized');
 
 		app.listen(PORT, () => {
 			console.log(`Server running on port ${PORT}`);
 		});
 	} catch (error) {
 		console.error('Failed to start server:', error.message || error);
-		process.exit(1);
+		// Continue anyway - server can still accept requests even if DB init fails
+		console.warn('⚠️  Starting server without database. Database operations will fail.');
+		app.listen(PORT, () => {
+			console.log(`Server running on port ${PORT} (database offline)`);
+		});
 	}
 }
 

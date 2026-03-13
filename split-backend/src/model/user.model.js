@@ -9,12 +9,6 @@ function initUserModel(sequelize) {
         autoIncrement: true,
         primaryKey: true,
       },
-      googleSub: {
-        type: DataTypes.STRING(128),
-        unique: true,
-        allowNull: true,
-        field: 'google_sub',
-      },
       name: {
         type: DataTypes.STRING(120),
         allowNull: false,
@@ -35,6 +29,10 @@ function initUserModel(sequelize) {
         allowNull: true,
         field: 'avatar_url',
       },
+      password: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
       upiId: {
         type: DataTypes.STRING(120),
         allowNull: true,
@@ -43,7 +41,7 @@ function initUserModel(sequelize) {
       authProvider: {
         type: DataTypes.ENUM('google', 'email'),
         allowNull: false,
-        defaultValue: 'google',
+        defaultValue: 'email',
         field: 'auth_provider',
       },
       isActive: {
@@ -61,7 +59,6 @@ function initUserModel(sequelize) {
     {
       indexes: [
         { unique: true, fields: ['email'] },
-        { unique: true, fields: ['google_sub'] },
         { fields: ['is_active'] },
       ],
     }

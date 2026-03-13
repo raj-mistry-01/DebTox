@@ -1,7 +1,7 @@
-import { MOCK_ACTIVITIES } from '@/data/mockData';
 import { Activity } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
 import {
     FlatList,
     StyleSheet,
@@ -9,7 +9,9 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    ActivityIndicator,
 } from 'react-native';
+import { useActivity } from '@/hooks/useApi';
 
 const TYPE_META: Record<Activity['type'], { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
   expense: { icon: 'receipt-outline', color: '#e94560', label: 'Expense' },
@@ -46,14 +48,38 @@ const FILTERS: Activity['type'][] = ['expense', 'payment', 'settlement'];
 export default function ActivityScreen() {
   const [activeFilter, setActiveFilter] = useState<Activity['type'] | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { activities, loading, error, refetch } = useActivity(refreshKey);
 
-  const filtered = MOCK_ACTIVITIES.filter((a) => {
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  const filtered = activities.filter((a) => {
     const matchesFilter = activeFilter === 'all' || a.type === activeFilter;
     const matchesSearch = search === '' || 
       a.description.toLowerCase().includes(search.toLowerCase()) || 
       (a.groupName && a.groupName.toLowerCase().includes(search.toLowerCase()));
     return matchesFilter && matchesSearch;
   });
+
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1);
+  };
+
+  if (error && !loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.errorText}>Error loading activity</Text>
+        <Text style={styles.errorSubtext}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={handleRefresh}>
+          <Text style={styles.retryBtnText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -84,14 +110,22 @@ export default function ActivityScreen() {
         ))}
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ActivityItem item={item} />}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={<Text style={styles.empty}>No activity yet.</Text>}
-      />
+      {loading ? (
+        <View style={[styles.list, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#e94560" />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <ActivityItem item={item} />}
+          contentContainerStyle={styles.list}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={<Text style={styles.empty}>No activity yet.</Text>}
+          refreshing={loading}
+          onRefresh={handleRefresh}
+        />
+      )}
     </View>
   );
 }
@@ -153,4 +187,8 @@ const styles = StyleSheet.create({
   itemDate: { color: '#555', fontSize: 11, marginTop: 2 },
   amount: { color: '#ccc', fontSize: 14, fontWeight: '700' },
   empty: { color: '#666', textAlign: 'center', marginTop: 40, fontSize: 15 },
+  errorText: { color: '#f87171', fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  errorSubtext: { color: '#888', fontSize: 14, marginBottom: 16 },
+  retryBtn: { backgroundColor: '#e94560', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 },
+  retryBtnText: { color: '#fff', fontWeight: '600' },
 });

@@ -1,49 +1,146 @@
 import { User } from '@/types';
-import React, { createContext, ReactNode, useContext, useState } from 'react';
+import React, { createContext, ReactNode, useContext, useState, useEffect } from 'react';
+import { apiClient } from '@/services/api';
+import { getToken, removeToken, saveToken, getUser, saveUser, removeUser } from '@/services/storage';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   currentUser: User | null;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  restoreToken: () => Promise<void>;
+  updateProfile: (name?: string, phone?: string, upiId?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock current user for scaffolding
-const MOCK_USER: User = {
-  id: 'user-1',
-  name: 'Alex Johnson',
-  email: 'alex@example.com',
-  avatarUrl: undefined,
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = async (email: string, _password: string) => {
-    // Stub — replace with real API call
-    await new Promise((r) => setTimeout(r, 500));
-    setCurrentUser({ ...MOCK_USER, email });
-    setIsAuthenticated(true);
+  // Restore token and user on app start
+  useEffect(() => {
+    restoreToken();
+  }, []);
+
+  const restoreToken = async () => {
+    try {
+      const token = await getToken();
+      const user = await getUser();
+      
+      if (token && user) {
+        apiClient.setToken(token);
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+      }
+    } catch (error) {
+      console.error('Failed to restore token:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const register = async (name: string, email: string, _password: string) => {
-    // Stub — replace with real API call
-    await new Promise((r) => setTimeout(r, 500));
-    setCurrentUser({ id: 'user-new', name, email });
-    setIsAuthenticated(true);
+  const login = async (email: string, password: string) => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.signIn(email, password);
+      
+      const user: User = {
+        id: response.user.id,
+        name: response.user.name,
+        email: response.user.email,
+      };
+
+      apiClient.setToken(response.accessToken);
+      await saveToken(response.accessToken);
+      await saveUser(user);
+
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const logout = () => {
-    setCurrentUser(null);
-    setIsAuthenticated(false);
+  const register = async (name: string, email: string, password: string) => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.signUp(name, email, password);
+      
+      const user: User = {
+        id: response.user.id,
+        name: response.user.name,
+        email: response.user.email,
+      };
+
+      apiClient.setToken(response.accessToken);
+      await saveToken(response.accessToken);
+      await saveUser(user);
+
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('Registration failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      setIsLoading(true);
+      apiClient.clearToken();
+      await removeToken();
+      await removeUser();
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateProfile = async (name?: string, phone?: string, upiId?: string) => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.updateProfile(name, phone, upiId);
+      
+      const updatedUser: User = {
+        ...currentUser!,
+        ...(response.user || {}),
+      };
+
+      await saveUser(updatedUser);
+      setCurrentUser(updatedUser);
+    } catch (error) {
+      console.error('Profile update failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, currentUser, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated,
+        currentUser,
+        isLoading,
+        login,
+        register,
+        logout,
+        restoreToken,
+        updateProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

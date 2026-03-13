@@ -1,73 +1,116 @@
-import { MOCK_EXPENSES, MOCK_FRIENDS } from '@/data/mockData';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { apiClient } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
+
+interface Activity {
+  id: string;
+  type: 'expense' | 'payment';
+  description: string;
+  amount: number;
+  date: string;
+  involvedUsers?: { name: string; id: string }[];
+}
 
 export default function FriendDetailScreen() {
   const { friendId } = useLocalSearchParams<{ friendId: string }>();
-  const friend = MOCK_FRIENDS.find((f) => f.user.id === friendId) ?? MOCK_FRIENDS[0];
-  const shared = MOCK_EXPENSES.filter(
-    (e) => e.splitWith.some((s) => s.user.id === friend.user.id) || e.paidBy.id === friend.user.id
-  );
+  const { user } = useAuth();
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [friendName, setFriendName] = useState('Friend');
 
-  const initials = friend.user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  const balance = friend.balance;
-  const balanceColor = balance > 0 ? '#4ade80' : balance < 0 ? '#f87171' : '#888';
+  useEffect(() => {
+    fetchFriendExpenses();
+  }, [friendId]);
+
+  const fetchFriendExpenses = async () => {
+    try {
+      setLoading(true);
+      // Fetch all activities
+      const response = await apiClient.getActivity();
+      const allActivities: Activity[] = response.activities || [];
+
+      // Filter to only show activities involving this friend
+      const friendActivities = allActivities.filter((activity) => {
+        return (
+          activity.involvedUsers &&
+          activity.involvedUsers.some((u) => u.id === friendId)
+        );
+      });
+
+      // Get friend name from first activity if available
+      if (friendActivities.length > 0 && friendActivities[0].involvedUsers) {
+        const friend = friendActivities[0].involvedUsers.find((u) => u.id === friendId);
+        if (friend) setFriendName(friend.name);
+      }
+
+      // Sort by date (newest first)
+      friendActivities.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      setActivities(friendActivities);
+    } catch (error) {
+      console.error('Failed to fetch friend expenses:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#4ade80" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
-      {/* Friend header */}
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
-        <Text style={styles.name}>{friend.user.name}</Text>
-        <Text style={styles.email}>{friend.user.email}</Text>
-
-        <View style={styles.balanceBadge}>
-          <Text style={[styles.balanceText, { color: balanceColor }]}>
-            {balance > 0
-              ? `${friend.user.name.split(' ')[0]} owes you $${balance.toFixed(2)}`
-              : balance < 0
-              ? `You owe ${friend.user.name.split(' ')[0]} $${Math.abs(balance).toFixed(2)}`
-              : 'All settled up!'}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.settleBtn}
-          onPress={() => router.push(`/settle/${friend.user.id}`)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
-          <Text style={styles.settleBtnText}>Settle Up</Text>
-        </TouchableOpacity>
+      {/* Title */}
+      <View style={styles.titleSection}>
+        <Text style={styles.title}>Shared Expenses with {friendName}</Text>
       </View>
 
-      {/* Shared expenses */}
-      <Text style={styles.sectionTitle}>Shared Expenses</Text>
-      {shared.length === 0 ? (
+      {/* Shared expenses list */}
+      {activities.length === 0 ? (
         <Text style={styles.empty}>No shared expenses yet.</Text>
       ) : (
-        shared.map((exp) => (
+        activities.map((activity) => (
           <TouchableOpacity
-            key={exp.id}
+            key={activity.id}
             style={styles.expenseCard}
-            onPress={() => router.push(`/expenses/${exp.id}`)}
             activeOpacity={0.75}
+            onPress={() => {
+              if (activity.type === 'expense') {
+                // Extract expense ID from "expense-123"
+                const expenseId = activity.id.split('-')[1];
+                router.push(`/expenses/${expenseId}`);
+              }
+            }}
           >
             <View style={styles.expenseLeft}>
               <View style={styles.expIcon}>
-                <Ionicons name="receipt-outline" size={18} color="#e94560" />
+                <Ionicons
+                  name={activity.type === 'expense' ? 'receipt-outline' : 'swap-horizontal'}
+                  size={18}
+                  color={activity.type === 'expense' ? '#e94560' : '#4ade80'}
+                />
               </View>
               <View>
-                <Text style={styles.expDesc}>{exp.description}</Text>
+                <Text style={styles.expDesc}>{activity.description}</Text>
                 <Text style={styles.expDate}>
-                  {new Date(exp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {new Date(activity.date).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
                 </Text>
               </View>
             </View>
-            <Text style={styles.expAmount}>${exp.amount.toFixed(2)}</Text>
+            <Text style={styles.expAmount}>${activity.amount.toFixed(2)}</Text>
           </TouchableOpacity>
         ))
       )}
@@ -77,50 +120,16 @@ export default function FriendDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f0f1a' },
-  header: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20 },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#e94560',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: '#fff', fontWeight: '800', fontSize: 26 },
-  name: { color: '#fff', fontSize: 22, fontWeight: '800', marginTop: 12 },
-  email: { color: '#888', fontSize: 13, marginTop: 4 },
-  balanceBadge: {
-    marginTop: 14,
-    backgroundColor: '#1a1a2e',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#2a2a3e',
-  },
-  balanceText: { fontWeight: '700', fontSize: 14 },
-  settleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-    backgroundColor: '#4ade80',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 14,
-  },
-  settleBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  sectionTitle: {
-    color: '#ccc',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+  titleSection: {
+    paddingVertical: 20,
     paddingHorizontal: 16,
-    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a3e',
   },
+  title: { color: '#fff', fontSize: 18, fontWeight: '700' },
   expenseCard: {
     marginHorizontal: 16,
+    marginTop: 12,
     marginBottom: 8,
     backgroundColor: '#1a1a2e',
     borderRadius: 14,

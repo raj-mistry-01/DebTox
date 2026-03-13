@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 // Email templates
 const emailTemplates = {
   friendRequest: (senderName, receiverName, appUrl) => ({
-    subject: `${senderName} sent you a friend request on Splitwise`,
+    subject: `${senderName} sent you a friend request on Debtox`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -22,17 +22,17 @@ const emailTemplates = {
         <body>
           <div class="container">
             <div class="header">
-              <div class="logo">💸 Splitwise</div>
+              <div class="logo">💸 Debtox</div>
             </div>
             <div class="content">
               <p>Hi ${receiverName},</p>
-              <p><strong>${senderName}</strong> sent you a friend request on Splitwise!</p>
+              <p><strong>${senderName}</strong> sent you a friend request on Debtox!</p>
               <p>Accept this request to start splitting expenses together.</p>
               <a href="${appUrl}/friends" class="action-btn">View Friend Request</a>
               <p>If you didn't recognize this request, you can ignore it.</p>
             </div>
             <div class="footer">
-              <p>© 2024 Splitwise. All rights reserved.</p>
+              <p>© 2024 Debtox. All rights reserved.</p>
               <p>This is an automated email. Please do not reply.</p>
             </div>
           </div>
@@ -61,7 +61,7 @@ const emailTemplates = {
         <body>
           <div class="container">
             <div class="header">
-              <div class="logo">💸 Splitwise</div>
+              <div class="logo">💸 Debtox</div>
             </div>
             <div class="content">
               <p>Hi ${receiverName},</p>
@@ -70,7 +70,7 @@ const emailTemplates = {
               <a href="${appUrl}/friends" class="action-btn">View Your Friends</a>
             </div>
             <div class="footer">
-              <p>© 2024 Splitwise. All rights reserved.</p>
+              <p>© 2024 Debtox. All rights reserved.</p>
               <p>This is an automated email. Please do not reply.</p>
             </div>
           </div>

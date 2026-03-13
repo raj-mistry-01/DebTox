@@ -126,22 +126,25 @@ async function getFriend(req, res) {
 async function settlePayment(req, res) {
   try {
     const { friendId } = req.params;
-    const { amount, groupId, method = 'online' } = req.body;
+    const { amount, groupId = null, method = 'online' } = req.body;
     const userId = req.user.sub;
 
-    if (!amount || !groupId) {
+    if (!amount || !friendId) {
       return res
         .status(400)
-        .json({ message: 'amount and groupId are required' });
+        .json({ message: 'amount and friendId are required' });
     }
 
-    const group = await Group.findByPk(groupId);
-    if (!group) {
-      return res.status(404).json({ message: 'Group not found' });
+    // If groupId provided, verify it exists
+    if (groupId) {
+      const group = await Group.findByPk(groupId);
+      if (!group) {
+        return res.status(404).json({ message: 'Group not found' });
+      }
     }
 
     const payment = await Payment.create({
-      groupId,
+      groupId: groupId || null, // null for friend-to-friend payments
       payerId: userId,
       payeeId: friendId,
       amount: parseFloat(amount),
@@ -149,28 +152,34 @@ async function settlePayment(req, res) {
       status: 'completed',
     });
 
-    // Mark expense shares as settled - find all expenses where payer is userId
-    const expenses = await Expense.findAll({
-      where: { groupId, paidByUserId: userId },
-    });
+    // Mark expense shares as settled - if groupId provided
+    if (groupId) {
+      const expenses = await Expense.findAll({
+        where: { groupId, paidByUserId: userId },
+      });
 
-    const expenseIds = expenses.map((e) => e.id);
+      const expenseIds = expenses.map((e) => e.id);
 
-    if (expenseIds.length > 0) {
-      await ExpenseShare.update(
-        { isSettled: true },
-        {
-          where: {
-            userId: friendId,
-            expenseId: { [Op.in]: expenseIds },
-          },
-        }
-      );
+      if (expenseIds.length > 0) {
+        await ExpenseShare.update(
+          { isSettled: true },
+          {
+            where: {
+              userId: friendId,
+              expenseId: { [Op.in]: expenseIds },
+            },
+          }
+        );
+      }
     }
 
     // Update or create balance
     const balance = await Balance.findOne({
-      where: { groupId, fromUserId: userId, toUserId: friendId },
+      where: { 
+        groupId: groupId || null,
+        fromUserId: userId, 
+        toUserId: friendId 
+      },
     });
 
     if (balance) {

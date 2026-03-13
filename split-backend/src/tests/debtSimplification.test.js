@@ -2,7 +2,7 @@
  * Debt Simplification Algorithm - Test Cases
  * 
  * This file contains comprehensive test cases for the greedy max-heap algorithm
- * based on examples from GeeksForGeeks and Splitwise scenarios
+ * based on examples from GeeksForGeeks and Debtox scenarios
  */
 
 import { DebtSimplificationService } from '../services/debtSimplification.service.js';

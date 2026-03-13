@@ -44,7 +44,7 @@ export default function LoginScreen() {
         {/* Logo / Header */}
         <View style={styles.logoContainer}>
           <Text style={styles.logoIcon}>💸</Text>
-          <Text style={styles.logoText}>Splitwise</Text>
+          <Text style={styles.logoText}>Debtox</Text>
           <Text style={styles.tagline}>Split bills. Not friendships.</Text>
         </View>
 

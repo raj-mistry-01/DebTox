@@ -17,7 +17,7 @@
 ---
 
 ### 2. **Split Options Missing** ✅ ADDED
-**Problem:** User wanted Splitwise-style split options (Equal, Percentage, Custom, Shares, Adjustment)
+**Problem:** User wanted Debtox-style split options (Equal, Percentage, Custom, Shares, Adjustment)
 
 **Solution:**
 - Updated `/frontend/app/expenses/new.tsx`:
@@ -245,7 +245,7 @@ When simplifying for User A:
 - [ ] Verify debt simplification includes both expense types
 - [ ] Test mixed group + friend expenses calculation
 - [ ] Verify friends section updates after payment creation
-- [ ] Check balance calculations match Splitwise style
+- [ ] Check balance calculations match Debtox style
 
 ---
 

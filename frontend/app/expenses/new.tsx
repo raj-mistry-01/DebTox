@@ -3,10 +3,10 @@
  * 
  * Two modes:
  * 1. Group Expense - Only shows members of selected group
- * 2. Friend Payment - Only shows accepted friends
+ * 2. Friend Payment - One-on-one payment between friends
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -25,6 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { apiClient } from '@/services/api';
 import { useGroups, useFriends } from '@/hooks/useApi';
+import { useAuth } from '@/context/AuthContext';
 
 type ExpenseType = 'group' | 'friend';
 type SplitType = 'equal' | 'percentage' | 'custom' | 'shares' | 'adjustment';
@@ -47,6 +48,7 @@ export default function NewExpenseScreen() {
   const { groupId: initialGroupId } = useLocalSearchParams<{ groupId?: string }>();
   const { groups } = useGroups();
   const { friends } = useFriends();
+  const { currentUser } = useAuth();
 
   // Expense details
   const [expenseType, setExpenseType] = useState<ExpenseType>('group');
@@ -66,6 +68,13 @@ export default function NewExpenseScreen() {
   // Data state
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Auto-set payer to current user when expense type changes to friend
+  useEffect(() => {
+    if (expenseType === 'friend' && currentUser) {
+      setSelectedPayer(currentUser.id);
+    }
+  }, [expenseType, currentUser]);
 
   // Fetch group members when group changes
   const handleGroupSelect = useCallback(
@@ -183,23 +192,61 @@ export default function NewExpenseScreen() {
           }));
       }
     } else {
-      // Friend expense - simple split
-      return [
-        {
-          userId: selectedFriend || '',
-          shareAmount: amountNum,
-        },
-      ];
+      // Friend expense - support split methods
+      if (!selectedFriend) return [];
+
+      switch (splitMethod) {
+        case 'equal':
+          // 50/50 split
+          return [
+            {
+              userId: selectedFriend,
+              shareAmount: amountNum / 2,
+            },
+          ];
+
+        case 'percentage':
+          // User specifies custom percentage for friend
+          const friendPercent = Math.min(100, Math.max(0, parseFloat(amount.split('/')[0]) || 50));
+          return [
+            {
+              userId: selectedFriend,
+              shareAmount: (amountNum * friendPercent) / 100,
+            },
+          ];
+
+        case 'custom':
+          // User specifies exact amount friend owes
+          // For now, use half if not specified
+          return [
+            {
+              userId: selectedFriend,
+              shareAmount: amountNum / 2,
+            },
+          ];
+
+        default:
+          // Default to 50/50
+          return [
+            {
+              userId: selectedFriend,
+              shareAmount: amountNum / 2,
+            },
+          ];
+      }
     }
   };
 
   // Handle expense type change
   const handleExpenseTypeChange = (type: ExpenseType) => {
     setExpenseType(type);
-    setSelectedPayer(null);
+    setSelectedPayer(type === 'friend' ? currentUser?.id || null : null);
     setGroupMembers([]);
     setSelectedGroup(null);
     setSelectedFriend(null);
+    if (type === 'group') {
+      setSplitMethod('equal');
+    }
   };
 
   // Create expense
@@ -216,12 +263,12 @@ export default function NewExpenseScreen() {
       return;
     }
 
-    if (!selectedPayer) {
-      Alert.alert('Error', 'Please select who paid');
-      return;
-    }
-
     if (expenseType === 'group') {
+      if (!selectedPayer) {
+        Alert.alert('Error', 'Please select who paid');
+        return;
+      }
+
       if (!selectedGroup) {
         Alert.alert('Error', 'Please select a group');
         return;
@@ -231,6 +278,7 @@ export default function NewExpenseScreen() {
         return;
       }
     } else {
+      // Friend expense
       if (!selectedFriend) {
         Alert.alert('Error', 'Please select a friend');
         return;
@@ -402,39 +450,50 @@ export default function NewExpenseScreen() {
         {expenseType === 'friend' && (
           <>
             <Text style={styles.label}>Select Friend</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {friends.map((f) => (
-                <TouchableOpacity
-                  key={f.user.id}
-                  style={[
-                    styles.friendChip,
-                    selectedFriend === f.user.id && styles.friendChipActive,
-                  ]}
-                  onPress={() => setSelectedFriend(f.user.id)}
-                >
-                  <View style={styles.friendAvatar}>
-                    <Text style={styles.friendAvatarText}>
-                      {f.user.name
-                        .split(' ')
-                        .map((w) => w[0])
-                        .join('')
-                        .slice(0, 2)
-                        .toUpperCase()}
+            {friends.length === 0 ? (
+              <View style={styles.infoBox}>
+                <Ionicons name="information-circle-outline" size={16} color="#3b82f6" />
+                <Text style={styles.infoText}>
+                  No friends yet. Add friends from the Friends section first.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {friends.map((f) => (
+                  <TouchableOpacity
+                    key={f.user.id}
+                    style={[
+                      styles.friendChip,
+                      selectedFriend === f.user.id && styles.friendChipActive,
+                    ]}
+                    onPress={() => setSelectedFriend(f.user.id)}
+                  >
+                    <View style={styles.friendAvatar}>
+                      <Text style={styles.friendAvatarText}>
+                        {f.user.name
+                          .split(' ')
+                          .map((w) => w[0])
+                          .join('')
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text numberOfLines={1} style={styles.friendName}>
+                      {f.user.name.split(' ')[0]}
                     </Text>
-                  </View>
-                  <Text numberOfLines={1} style={styles.friendName}>
-                    {f.user.name.split(' ')[0]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </>
         )}
 
-        {/* Who Paid */}
-        <Text style={styles.label}>Who Paid?</Text>
-        {loading ? (
-          <ActivityIndicator size="large" color="#e94560" />
+        {/* Who Paid - Group Mode Only */}
+        {expenseType === 'group' && (
+          <>
+            <Text style={styles.label}>Who Paid?</Text>
+            {loading ? (
+              <ActivityIndicator size="large" color="#e94560" />
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {displayMembers.map((member: any) => {
@@ -470,6 +529,67 @@ export default function NewExpenseScreen() {
               );
             })}
           </ScrollView>
+        )}
+          </>
+        )}
+
+        {/* Split Options (Friend Expense Only) */}
+        {expenseType === 'friend' && selectedFriend && (
+          <>
+            <Text style={styles.label}>How to Split with {selectedFriend}?</Text>
+            <View style={styles.typeToggle}>
+              <TouchableOpacity
+                style={[
+                  styles.typeBtn,
+                  splitMethod === 'equal' && styles.typeBtnActive,
+                ]}
+                onPress={() => setSplitMethod('equal')}
+              >
+                <Text
+                  style={[
+                    styles.typeText,
+                    splitMethod === 'equal' && styles.typeTextActive,
+                  ]}
+                >
+                  Equal
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.typeBtn,
+                  splitMethod === 'percentage' && styles.typeBtnActive,
+                ]}
+                onPress={() => setSplitMethod('percentage')}
+              >
+                <Text
+                  style={[
+                    styles.typeText,
+                    splitMethod === 'percentage' && styles.typeTextActive,
+                  ]}
+                >
+                  %
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.typeBtn,
+                  splitMethod === 'custom' && styles.typeBtnActive,
+                ]}
+                onPress={() => setSplitMethod('custom')}
+              >
+                <Text
+                  style={[
+                    styles.typeText,
+                    splitMethod === 'custom' && styles.typeTextActive,
+                  ]}
+                >
+                  Custom
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
 
         {/* Split Options (Group Expense Only) */}

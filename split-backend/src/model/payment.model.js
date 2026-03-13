@@ -11,8 +11,9 @@ function initPaymentModel(sequelize) {
       },
       groupId: {
         type: DataTypes.BIGINT,
-        allowNull: false,
+        allowNull: true,
         field: 'group_id',
+        comment: 'NULL for friend-to-friend payments, non-NULL for group payments',
       },
       payerId: {
         type: DataTypes.BIGINT,

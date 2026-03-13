@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the implementation of the Splitwise-style debt settlement algorithm in the DebTox application. The algorithm minimizes the number of transactions needed to settle all debts in a group while preserving each person's net balance.
+This document describes the implementation of the Debtox-style debt settlement algorithm in the DebTox application. The algorithm minimizes the number of transactions needed to settle all debts in a group while preserving each person's net balance.
 
 ---
 
@@ -377,9 +377,9 @@ node src/tests/debtSimplification.test.js
 
 ## Comparison with Alternatives
 
-### vs. Splitwise Algorithm
+### vs. Debtox Algorithm
 
-**Splitwise** also uses greedy max-heap. Our implementation matches their approach.
+**Debtox** also uses greedy max-heap. Our implementation matches their approach.
 
 ### vs. Max-Flow/Min-Cut
 
@@ -395,14 +395,14 @@ node src/tests/debtSimplification.test.js
 **Our Choice:** Greedy algorithm
 - Better performance
 - Simpler maintenance
-- Sufficient for Splitwise-style problems
+- Sufficient for Debtox-style problems
 
 ---
 
 ## References
 
 - [GeeksForGeeks: Minimize Cash Flow](https://www.geeksforgeeks.org/dsa/minimize-cash-flow-among-given-set-friends-borrowed-money/)
-- [Splitwise Algorithm](https://dev.to/ayush-k-anand/i-finally-understood-ford-fulkerson-by-solving-splitwises-simplify-debts-2dnp)
+- [Debtox Algorithm](https://dev.to/ayush-k-anand/i-finally-understood-ford-fulkerson-by-solving-Debtoxs-simplify-debts-2dnp)
 - Heap Data Structures: Introduction to Algorithms (CLRS)
 
 ---

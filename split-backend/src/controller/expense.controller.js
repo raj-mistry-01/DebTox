@@ -61,15 +61,17 @@ async function createExpense(req, res) {
 
     await Promise.all(sharePromises);
 
-    // Update balances
+    // Update balances - round to 2 decimals to avoid floating point errors
     for (const split of splits) {
       if (split.userId === req.user.sub) continue; // Skip self
 
-      const shareAmount = parseFloat(split.shareAmount);
+      const shareAmount = parseFloat(parseFloat(split.shareAmount).toFixed(2));
+      const gId = groupId || null; // Handle null for friend expenses
+      
       const existing = await Balance.findOne(
         {
           where: {
-            groupId,
+            groupId: gId,
             fromUserId: split.userId,
             toUserId: req.user.sub,
           },
@@ -78,14 +80,16 @@ async function createExpense(req, res) {
       );
 
       if (existing) {
+        // Update with rounded value
+        const newAmount = parseFloat((existing.netAmount + shareAmount).toFixed(2));
         await existing.update(
-          { netAmount: sequelize.literal(`net_amount + ${shareAmount}`) },
+          { netAmount: newAmount },
           { transaction }
         );
       } else {
         await Balance.create(
           {
-            groupId,
+            groupId: gId,
             fromUserId: split.userId,
             toUserId: req.user.sub,
             netAmount: shareAmount,

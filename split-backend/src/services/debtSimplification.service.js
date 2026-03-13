@@ -65,10 +65,14 @@ export class DebtSimplificationService {
         }
       }
 
-      // Remove zero balances (settled people)
+      // Round all balances to 2 decimals and remove near-zero balances
+      const EPSILON = 0.01;
       for (const [userId, balance] of netBalances.entries()) {
-        if (Math.abs(balance) < 0.01) { // Account for floating point errors
+        const roundedBalance = parseFloat(balance.toFixed(2));
+        if (Math.abs(roundedBalance) < EPSILON) {
           netBalances.delete(userId);
+        } else {
+          netBalances.set(userId, roundedBalance);
         }
       }
 
@@ -116,13 +120,19 @@ export class DebtSimplificationService {
    * @returns {Promise<Array>} - Array of settlement transactions
    */
   static async minimizeCashFlow(netBalances) {
+    // Rounding tolerance: Account for floating point arithmetic errors
+    const EPSILON = 0.05; // 5 cents tolerance
+    
     // Validate zero-sum property (required for valid settlement)
     let totalBalance = 0;
     for (const balance of netBalances.values()) {
       totalBalance += balance;
     }
 
-    if (Math.abs(totalBalance) > 0.01) {
+    // Round totalBalance to 2 decimals before comparison
+    totalBalance = parseFloat(totalBalance.toFixed(2));
+
+    if (Math.abs(totalBalance) > EPSILON) {
       throw new Error(
         `Invalid net balances: sum must be zero, got ${totalBalance.toFixed(2)}`
       );

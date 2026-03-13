@@ -1,0 +1,9 @@
+import { useAuth } from '@/context/AuthContext';
+import { Redirect } from 'expo-router';
+
+export default function Index() {
+  const { isAuthenticated } = useAuth();
+
+  // Redirect component fires safely after the Stack navigator has mounted
+  return <Redirect href={isAuthenticated ? '/(tabs)/groups' : '/login'} />;
+}

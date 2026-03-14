@@ -1,6 +1,6 @@
 // Use 10.0.2.2 for Android emulator to reach host machine
 // For physical devices or iOS simulator, update this in .env.local
-const BACKEND_URL =  'https://390d-2401-4900-ae38-3c49-2030-19e8-5407-3fac.ngrok-free.app';
+const BACKEND_URL =  'https://78c0-2401-4900-ae38-3c49-2030-19e8-5407-3fac.ngrok-free.app';
 
 export class ApiClient {
   private token: string | null = null;

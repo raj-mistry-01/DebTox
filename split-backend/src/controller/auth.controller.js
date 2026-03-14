@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { User } from '../model/index.js';
+import { sendLoginNotificationEmail } from '../services/emailService.js';
 
 const getOAuthClient = () => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -93,6 +94,7 @@ async function signIn(req, res) {
 
     user.lastLoginAt = new Date();
     await user.save();
+    sendLoginNotificationEmail(user.email, user.name).catch(() => {});
 
     const accessToken = signAccessToken(user);
 

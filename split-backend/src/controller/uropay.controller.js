@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { Op } from 'sequelize';
 import { Payment, Balance, Notification, User } from '../model/index.js';
+import { sendPaymentReceiptEmail } from '../services/emailService.js';
+
 
 // ─── Read env vars ────────────────────────────────────────────────────────────
 const UROPAY_API_KEY  = (process.env.UROPAY_API_KEY  ?? '').trim();
@@ -31,7 +33,10 @@ function getUroPayHeaders() {
 export async function generateOrder(req, res) {
   try {
     const { amount, merchantOrderId, transactionNote, customerName, customerEmail, receiverUPI } = req.body;
-
+    
+    const customerEmailToUse = customerEmail || req.user?.email || 'user@debtox.com';
+    const customerNameToUse = customerName || req.user?.name || 'DebTox User';
+    
     console.log('[UroPay] 📨 Request received:', { amount, merchantOrderId, transactionNote, receiverUPI });
 
     // Amount must be in paise
@@ -56,8 +61,8 @@ export async function generateOrder(req, res) {
       amount: amountValue,
       merchantOrderId,
       transactionNote: transactionNote || '',
-      customerName: customerName || 'DebTox User',
-      customerEmail: customerEmail || 'user@debtox.com',
+      customerName: customerNameToUse,
+      customerEmail: customerEmailToUse,
     };
 
     console.log('[UroPay] 🔐 Credentials loaded:');
@@ -164,6 +169,7 @@ export async function finalizePayment(req, res) {
 
     console.log(`[Payment Finalize] ✅ Payment record created: ${payment.id}`);
 
+
     // 2. Update Balance (reduce debt) - use same pattern as getFriend() to find friend-to-friend balances
     const balances = await Balance.findAll({
       where: {
@@ -204,6 +210,19 @@ export async function finalizePayment(req, res) {
     // 3. Create notifications for both users
     const payer = await User.findByPk(userId);
     const payee = await User.findByPk(friendId);
+
+    // Send payment receipt email to payer
+    if (payer?.email) {
+      sendPaymentReceiptEmail(
+        payer.email,
+        payer.name,
+        amount,
+        payment.id,
+        upiTxnId
+      ).catch((err) => {
+        console.log(`[Payment Finalize] ⚠️  Email send failed: ${err.message}`);
+      });
+    }
 
     await Notification.create({
       userId: friendId,

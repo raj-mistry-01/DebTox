@@ -1,24 +1,22 @@
 import 'dotenv/config';
 
-
-
-import dns from "node:dns/promises";
-dns.setServers(["8.8.8.8", "8.8.4.4"]);
-
 import app from './app.js';
 import { PORT } from './constant.js';
 import initializeModels from './model/initModels.js';
+
+import dns from "node:dns/promises";
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 async function startServer() {
 	try {
 		// Initialize database tables on startup with timeout
 		// alter: true will add missing columns to existing tables
-		// const dbInitPromise = initializeModels({ alter: true });
+		const dbInitPromise = initializeModels({ alter: true });
 		const timeoutPromise = new Promise((_, reject) => 
 			setTimeout(() => reject(new Error('Database initialization timeout')), 15000)
 		);
 
-		await Promise.race([timeoutPromise]);
+		await Promise.race([dbInitPromise, timeoutPromise]);
 		console.log('Database synchronized');
 
 		app.listen(PORT, () => {

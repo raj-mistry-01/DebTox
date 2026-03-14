@@ -14,7 +14,7 @@ function requireAuth(req, res, next) {
     return next();
   } catch (error) {
     return res.status(401).json({ message: 'Unauthorized: invalid token' });
-  }
+  } 
 }
 
 export { requireAuth };

@@ -22,6 +22,7 @@ interface FriendBalance {
   friendId: string;
   friendName: string;
   balance: number;
+  upiId?: string;
 }
 
 type PaymentMethod = 'Cash' | 'Card' | 'UPI';
@@ -45,11 +46,13 @@ export default function SettleUpScreen() {
     try {
       setLoading(true);
       const response = await apiClient.getBalance(userId!);
-      // The response has user.name and balance
+      console.log(response)
+      // The response has user (with upiId) and balance
       setFriend({
         friendId: userId!,
         friendName: response.user?.name || 'Friend',
         balance: response.balance || 0,
+        upiId: response.user?.upiId,  // Get receiver's UPI
       });
       // Set default amount to the balance
       setAmount(Math.abs(response.balance || 0).toFixed(2));
@@ -93,8 +96,17 @@ export default function SettleUpScreen() {
       return;
     }
 
+    if (!friend?.upiId) {
+      Alert.alert('Error', 'Receiver UPI not available. Cannot generate QR code.');
+      return;
+    }
+
     const amountInPaise = Math.round(parsed * 100);
-    const order = await generateQRCode(amountInPaise, note || `Settle up with ${friend?.friendName || 'Friend'}`);
+    const order = await generateQRCode(
+      amountInPaise,
+      note || `Settle up with ${friend?.friendName || 'Friend'}`,
+      friend.upiId  // Pass receiver's UPI
+    );
     
     if (order?.qrCode) {
       setQrCode(order.qrCode);

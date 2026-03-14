@@ -34,7 +34,7 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      await register(name.trim(), email.trim(), password);
+      await register(name.trim(), email.trim(), password, upiId.trim());
       router.replace('/(tabs)/groups');
     } catch (e) {
       Alert.alert('Registration failed', 'Please try again.');

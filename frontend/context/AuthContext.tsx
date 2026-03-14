@@ -10,7 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   googleLogin: (idToken: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, upiId?: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreToken: () => Promise<void>;
   updateProfile: (name?: string, phone?: string, upiId?: string) => Promise<void>;
@@ -54,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: response.user.id,
         name: response.user.name,
         email: response.user.email,
+        upiId: response.user.upiId,
       };
 
       apiClient.setToken(response.accessToken);
@@ -102,10 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, password: string, upiId?: string) => {
     try {
       setIsLoading(true);
-      const response = await apiClient.signUp(name, email, password);
+      const response = await apiClient.signUp(name, email, password, upiId);
       
       const user: User = {
         id: response.user.id,

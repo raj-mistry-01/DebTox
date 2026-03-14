@@ -1,6 +1,6 @@
 // Use 10.0.2.2 for Android emulator to reach host machine
 // For physical devices or iOS simulator, update this in .env.local
-const BACKEND_URL =  'https://ece1-136-232-1-166.ngrok-free.app';
+const BACKEND_URL =  'https://0f87-2401-4900-ae4f-5fbb-996b-a2d6-7629-1b20.ngrok-free.app';
 
 export class ApiClient {
   private token: string | null = null;
@@ -54,11 +54,11 @@ export class ApiClient {
   }
 
   // Auth endpoints
-  async signUp(name: string, email: string, password: string) {
+  async signUp(name: string, email: string, password: string, upiId?: string) {
     console.log("yes")
     return this.request('/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, upiId }),
     });
   }
 

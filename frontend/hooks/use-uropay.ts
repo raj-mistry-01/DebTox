@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useCallback, useState } from 'react';
 
 // Match the ngrok proxy being used in api.ts
-const BACKEND_URL = 'https://ece1-136-232-1-166.ngrok-free.app';
+const BACKEND_URL = 'https://0f87-2401-4900-ae4f-5fbb-996b-a2d6-7629-1b20.ngrok-free.app';
 
 const api = axios.create({
   baseURL: BACKEND_URL + '/api/v1/payments',
@@ -13,13 +13,14 @@ const api = axios.create({
 export const useUroPay = () => {
   const [loading, setLoading] = useState(false);
 
-  const generateQRCode = useCallback(async (amount: number, note?: string) => {
+  const generateQRCode = useCallback(async (amount: number, note?: string, receiverUPI?: string) => {
     try {
       setLoading(true);
       const { data } = await api.post('/create-order', {
         amount, // in paise
         merchantOrderId: `ORDER-${Date.now()}`,
         transactionNote: note || 'UPI Payment',
+        receiverUPI,
       });
       return data?.data;
     } catch (e) {

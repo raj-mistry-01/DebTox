@@ -23,7 +23,7 @@ function signAccessToken(user) {
 
 async function signUp(req, res) {
   try {
-    const { email, name, password } = req.body;
+    const { email, name, password, upiId } = req.body;
 
     if (!email || !name || !password) {
       return res.status(400).json({ message: 'email, name, and password are required' });
@@ -43,6 +43,7 @@ async function signUp(req, res) {
       email: email.toLowerCase(),
       name,
       password: hashedPassword,
+      upiId: upiId || null,
       authProvider: 'email',
       isActive: true,
       lastLoginAt: new Date(),
@@ -57,6 +58,7 @@ async function signUp(req, res) {
         id: user.id,
         name: user.name,
         email: user.email,
+        upiId: user.upiId,
       },
     });
   } catch (error) {
@@ -101,6 +103,7 @@ async function signIn(req, res) {
         id: user.id,
         name: user.name,
         email: user.email,
+        upiId: user.upiId,
       },
     });
   } catch (error) {

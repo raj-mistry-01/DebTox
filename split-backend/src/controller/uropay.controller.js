@@ -28,9 +28,9 @@ function getUroPayHeaders() {
 
 export async function generateOrder(req, res) {
   try {
-    const { amount, merchantOrderId, transactionNote, customerName, customerEmail } = req.body;
+    const { amount, merchantOrderId, transactionNote, customerName, customerEmail, receiverUPI } = req.body;
 
-    console.log('[UroPay] 📨 Request received:', { amount, merchantOrderId, transactionNote });
+    console.log('[UroPay] 📨 Request received:', { amount, merchantOrderId, transactionNote, receiverUPI });
 
     // Amount must be in paise
     const amountValue = parseInt(amount, 10);
@@ -42,8 +42,14 @@ export async function generateOrder(req, res) {
       return res.status(400).json({ message: 'merchantOrderId is required' });
     }
 
+    // Use receiver's UPI if provided, otherwise fall back to hardcoded VPA
+    const vpaToUse = receiverUPI || UROPAY_VPA;
+    if (!vpaToUse) {
+      return res.status(400).json({ message: 'No receiver UPI or fallback VPA available' });
+    }
+
     const payload = {
-      vpa: UROPAY_VPA,
+      vpa: vpaToUse,
       vpaName: UROPAY_VPA_NAME,
       amount: amountValue,
       merchantOrderId,
@@ -55,7 +61,9 @@ export async function generateOrder(req, res) {
     console.log('[UroPay] 🔐 Credentials loaded:');
     console.log('  - API Key:', UROPAY_API_KEY ? `${UROPAY_API_KEY.slice(0, 8)}…` : '❌ MISSING');
     console.log('  - Secret:', UROPAY_SECRET ? `${UROPAY_SECRET.slice(0, 8)}…` : '❌ MISSING');
-    console.log('  - VPA:', UROPAY_VPA || '❌ MISSING');
+    console.log('  - Receiver VPA (dynamic):', receiverUPI || '❌ NOT PROVIDED');
+    console.log('  - Fallback VPA (hardcoded):', UROPAY_VPA || '❌ MISSING');
+    console.log('  - VPA being used:', vpaToUse);
     console.log('  - VPA Name:', UROPAY_VPA_NAME || '❌ MISSING');
 
     console.log('[UroPay] 📤 Sending payload to UroPay API:', JSON.stringify(payload, null, 2));

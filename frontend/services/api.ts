@@ -1,6 +1,6 @@
 // Use 10.0.2.2 for Android emulator to reach host machine
 // For physical devices or iOS simulator, update this in .env.local
-const BACKEND_URL =  'https://861b-103-85-9-152.ngrok-free.app';
+const BACKEND_URL =  'https://7165-152-58-35-63.ngrok-free.app';
 
 export class ApiClient {
   private token: string | null = null;
@@ -22,11 +22,11 @@ export class ApiClient {
     
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     };
 
     if (this.token) {
-      headers.Authorization = `Bearer ${this.token}`;
+      headers['Authorization'] = `Bearer ${this.token}`;
     }
 
     try {
@@ -66,6 +66,13 @@ export class ApiClient {
     return this.request('/auth/signin', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    });
+  }
+
+  async googleSignIn(idToken: string) {
+    return this.request('/auth/google-signin', {
+      method: 'POST',
+      body: JSON.stringify({ idToken }),
     });
   }
 

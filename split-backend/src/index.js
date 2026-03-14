@@ -1,13 +1,11 @@
 import 'dotenv/config';
 
-
-
-import dns from "node:dns/promises";
-dns.setServers(["8.8.8.8", "8.8.4.4"]);
-
 import app from './app.js';
 import { PORT } from './constant.js';
 import initializeModels from './model/initModels.js';
+
+import dns from "node:dns/promises";
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 async function startServer() {
 	try {

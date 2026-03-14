@@ -1,6 +1,13 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import { User } from '../model/index.js';
+
+const getOAuthClient = () => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) throw new Error('GOOGLE_CLIENT_ID is not set in environment');
+  return new OAuth2Client(clientId);
+};
 
 function signAccessToken(user) {
   return jwt.sign(
@@ -143,8 +150,73 @@ async function updateProfile(req, res) {
   }
 }
 
+async function googleSignIn(req, res) {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ message: 'idToken is required' });
+    }
+
+    const client = getOAuthClient();
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email || payload.email_verified === false) {
+      return res.status(400).json({ message: 'Invalid Google token payload' });
+    }
+
+    const normalizedEmail = payload.email.toLowerCase();
+    let user = await User.findOne({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      // Create a brand new auto-generated account
+      user = await User.create({
+        email: normalizedEmail,
+        name: payload.name || normalizedEmail.split('@')[0],
+        avatarUrl: payload.picture || null,
+        authProvider: 'google',
+        isActive: true,
+        lastLoginAt: new Date(),
+      });
+    } else {
+      // Update their login time and profile if needed
+      user.name = payload.name || user.name;
+      user.avatarUrl = payload.picture || user.avatarUrl;
+      user.authProvider = 'google';
+      user.lastLoginAt = new Date();
+      await user.save();
+    }
+
+    const accessToken = signAccessToken(user);
+
+    return res.status(200).json({
+      message: 'Google Sign-in successful',
+      accessToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+      },
+    });
+  } catch (error) {
+    console.error('Google Sign-in failed:', error);
+    return res.status(401).json({
+      message: 'Google authentication failed',
+      error: error.message,
+    });
+  }
+}
+
 export {
   signUp,
   signIn,
   updateProfile,
+  googleSignIn,
 };

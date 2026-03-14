@@ -40,7 +40,7 @@ DebTox is a full-stack expense-splitting application that helps groups and frien
 | **Notifications** | Real-time payment alerts, friend request notifications |
 | **Account** | Profile management, UPI ID, stats, settings |
 
-*Screenshots coming soon - to be added via GitHub*
+refer to ui folder for screenshots
 
 ## 🏗️ Architecture
 
@@ -254,9 +254,6 @@ GET    /notifications/unread     - Get unread count
 | **friends** | Peer-to-peer | fromUserId, toUserId, status |
 | **notifications** | Alerts | userId, type, message, isRead |
 
-### Database Diagram
-
-*ER Diagram coming soon - to be added via GitHub*
 
 <!-- Add database schema diagram/image here -->
 

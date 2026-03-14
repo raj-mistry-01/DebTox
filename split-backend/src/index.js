@@ -19,7 +19,8 @@ async function startServer() {
 
 		// Step 2: Initialize models and create tables (WITHOUT force - keeps existing data)
 		console.log('🔄 Initializing database...');
-		const dbInitPromise = initializeModels({ alter: true, force: false });
+		// const dbInitPromise = initializeModels({ alter: true, force: false });
+		const dbInitPromise = initializeModels({ alter: process.env.NODE_ENV === 'development' && !process.env.DATABASE_URL, force: false });
 		const timeoutPromise = new Promise((_, reject) => 
 			setTimeout(() => reject(new Error('Database initialization timeout (45s)')), 45000)
 		);
@@ -40,4 +41,6 @@ async function startServer() {
 	}
 }
 
-startServer();
+await startServer();
+
+export default app;

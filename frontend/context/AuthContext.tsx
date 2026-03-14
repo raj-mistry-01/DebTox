@@ -2,12 +2,14 @@ import { User } from '@/types';
 import React, { createContext, ReactNode, useContext, useState, useEffect } from 'react';
 import { apiClient } from '@/services/api';
 import { getToken, removeToken, saveToken, getUser, saveUser, removeUser } from '@/services/storage';
+import { router } from 'expo-router';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   currentUser: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  googleLogin: (idToken: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreToken: () => Promise<void>;
@@ -68,6 +70,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const googleLogin = async (idToken: string) => {
+    console.log('Google Login started auth');
+    try {
+      setIsLoading(true);
+      const response = await apiClient.googleSignIn(idToken);
+
+      const user: User = {
+        id: response.user.id,
+        name: response.user.name,
+        email: response.user.email,
+        avatarUrl: response.user.avatarUrl,
+      };
+
+      console.log('Google Login successful, user:', user);
+
+      apiClient.setToken(response.accessToken);
+      await saveToken(response.accessToken);
+      await saveUser(user);
+
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.log('Google sdfklajsfasfja;skfj');
+      console.log('Google error');
+      // console.error('Google Login failed:', error);
+      throw error;
+    } finally {
+      console.log('Google settale');
+      setIsLoading(false);
+    }
+  };
+
   const register = async (name: string, email: string, password: string) => {
     try {
       setIsLoading(true);
@@ -85,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setCurrentUser(user);
       setIsAuthenticated(true);
+      
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;
@@ -135,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentUser,
         isLoading,
         login,
+        googleLogin,
         register,
         logout,
         restoreToken,

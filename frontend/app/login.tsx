@@ -1,23 +1,86 @@
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+WebBrowser.maybeCompleteAuthSession();
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, googleLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // const [request, response, promptAsync] = Google.useAuthRequest({
+  //   webClientId: "847665555342-pg0r163fb9189tq4b8ihkhdi22on01jc.apps.googleusercontent.com", // Generic fallback just in case
+  //   responseType: "id_token",  // 👈 add this
+  //   usePKCE: false,
+  // });
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    expoClientId: "847665555342-hmiv7tvdbln0lpji4v8a293mso5vail1.apps.googleusercontent.com",
+    webClientId: "847665555342-pg0r163fb9189tq4b8ihkhdi22on01jc.apps.googleusercontent.com",
+    androidClientId: "847665555342-prrhtlqm5ik12ue66piou2dcg27upq54.apps.googleusercontent.com",
+    responseType: "id_token",
+    usePKCE: false,
+  });
+
+  useEffect(() => {
+    const processResponse = async () => {
+      console.log('Login useEffect', response);
+      if (response?.type === 'success') {
+        const { authentication } = response;
+        const idToken = response.params?.id_token;
+        console.log('Login s', idToken);
+        if (idToken) {
+          console.log('Login maadchoe');
+          await handleGoogleLogin(idToken);
+        } else {
+          console.log('Login unsc');
+          Alert.alert('Google Sign-in failed', 'No ID Token received from Google.');
+        }
+      } else if (response?.type === 'cancel') {
+        console.log('Login c');
+        // user canceled
+      } else if (response?.type === 'error') {
+        console.log('Login unsc');
+        Alert.alert('Google Sign-in failed', response.error?.message || 'Something went wrong.');
+      } else {
+        console.log('Login fuk');
+      }
+    };
+
+    processResponse();
+  }, [response]);
+
+  const handleGoogleLogin = async (idToken: string) => {
+    console.log('Google Login started');
+    setLoading(true);
+    console.log('Login maadchoe');
+    try {
+      await googleLogin(idToken);
+      console.log('Login successful');
+      router.replace('/(tabs)/groups');
+    } catch (e) {
+      router.replace('/login');
+      console.log('Login unsc');
+    } finally {
+      console.log('Login fuk');
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -27,10 +90,13 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.trim(), password);
+      console.log('Login successful');
       router.replace('/(tabs)/groups');
     } catch (e) {
+      console.log('Login failed', e);
       Alert.alert('Login failed', 'Invalid credentials. Please try again.');
     } finally {
+      console.log('Login settllae');
       setLoading(false);
     }
   };
@@ -83,6 +149,23 @@ export default function LoginScreen() {
             ) : (
               <Text style={styles.buttonText}>Log In</Text>
             )}
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google Button */}
+          <TouchableOpacity
+            style={[styles.googleButton, loading && styles.buttonDisabled]}
+            onPress={() => promptAsync()}
+            disabled={loading || !request}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.googleButtonText}>Sign in with Google</Text>
           </TouchableOpacity>
         </View>
 
@@ -144,6 +227,33 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#2a2a3e',
+  },
+  dividerText: {
+    color: '#888',
+    paddingHorizontal: 12,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  googleButton: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: '#fff',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  googleButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

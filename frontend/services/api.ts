@@ -22,11 +22,11 @@ export class ApiClient {
     
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     };
 
     if (this.token) {
-      headers.Authorization = `Bearer ${this.token}`;
+      headers['Authorization'] = `Bearer ${this.token}`;
     }
 
     try {
@@ -66,6 +66,13 @@ export class ApiClient {
     return this.request('/auth/signin', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    });
+  }
+
+  async googleSignIn(idToken: string) {
+    return this.request('/auth/google-signin', {
+      method: 'POST',
+      body: JSON.stringify({ idToken }),
     });
   }
 

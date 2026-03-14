@@ -174,7 +174,7 @@ export default function AccountScreen() {
         ))}
       </View>
 
-      <Text style={styles.version}>Splitwise Clone v1.0.0</Text>
+      <Text style={styles.version}>Debtox Clone v1.0.0</Text>
     </ScrollView>
   );
 }

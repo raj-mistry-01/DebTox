@@ -1,11 +1,40 @@
-import { MOCK_EXPENSES } from '@/data/mockData';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { apiClient } from '@/services/api';
+
+interface ExpenseDetail {
+  id: string;
+  description: string;
+  amount: number;
+  category?: string;
+  date: string;
+  paidBy: { id: string; name: string };
+  splitWith: Array<{ user: { id: string; name: string }; share: number }>;
+}
 
 export default function ExpenseDetailScreen() {
   const { expenseId } = useLocalSearchParams<{ expenseId: string }>();
-  const expense = MOCK_EXPENSES.find((e) => e.id === expenseId) ?? MOCK_EXPENSES[0];
+  const [expense, setExpense] = useState<ExpenseDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchExpenseDetails();
+  }, [expenseId]);
+
+  const fetchExpenseDetails = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getExpense(expenseId!);
+      setExpense(response);
+    } catch (error) {
+      console.error('Failed to fetch expense:', error);
+      Alert.alert('Error', 'Failed to load expense details');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDelete = () => {
     Alert.alert('Delete Expense', 'Are you sure you want to delete this expense?', [
@@ -13,10 +42,33 @@ export default function ExpenseDetailScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => router.back(),
+        onPress: async () => {
+          try {
+            await apiClient.deleteExpense(expenseId!);
+            router.back();
+          } catch (error) {
+            Alert.alert('Error', 'Failed to delete expense');
+          }
+        },
       },
     ]);
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#4ade80" />
+      </View>
+    );
+  }
+
+  if (!expense) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#fff' }}>Expense not found</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
@@ -57,20 +109,24 @@ export default function ExpenseDetailScreen() {
       {/* Split */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Split with</Text>
-        {expense.splitWith.map(({ user, share }) => {
-          const initials = user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-          return (
-            <View key={user.id} style={styles.userRow}>
-              <View style={[styles.avatar, { backgroundColor: '#7c3aed' }]}>
-                <Text style={styles.avatarText}>{initials}</Text>
+        {expense.splitWith && expense.splitWith.length > 0 ? (
+          expense.splitWith.map((split) => {
+            const initials = split.user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+            return (
+              <View key={split.user.id} style={styles.userRow}>
+                <View style={[styles.avatar, { backgroundColor: '#7c3aed' }]}>
+                  <Text style={styles.avatarText}>{initials}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.userName}>{split.user.name}</Text>
+                </View>
+                <Text style={styles.share}>${split.share.toFixed(2)}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.userName}>{user.name}</Text>
-              </View>
-              <Text style={styles.share}>${share.toFixed(2)}</Text>
-            </View>
-          );
-        })}
+            );
+          })
+        ) : (
+          <Text style={{ color: '#666', marginTop: 8 }}>No split details</Text>
+        )}
       </View>
 
       {/* Actions */}

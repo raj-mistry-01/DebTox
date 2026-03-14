@@ -16,26 +16,62 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { apiClient } from '@/services/api';
+
+interface FriendBalance {
+  friendId: string;
+  friendName: string;
+  balance: number;
+}
 
 type PaymentMethod = 'Cash' | 'Card' | 'UPI';
 
 export default function SettleUpScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
-  const friend = MOCK_FRIENDS.find((f) => f.user.id === userId) ?? MOCK_FRIENDS[0];
-
-  const [amount, setAmount] = useState(Math.abs(friend.balance).toFixed(2));
+  const [friend, setFriend] = useState<FriendBalance | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('Cash');
   const [qrCode, setQrCode] = useState<string | null>(null);
 
   const { loading, generateQRCode } = useUroPay();
+  const { initiatePayment, pollStatus, loading: paymentLoading, shortURL, platformBillID } = useSetuPayment();
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const initials = friend.user.name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+  useEffect(() => {
+    fetchFriendBalance();
+  }, [userId]);
+
+  const fetchFriendBalance = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getBalance(userId!);
+      // The response has user.name and balance
+      setFriend({
+        friendId: userId!,
+        friendName: response.user?.name || 'Friend',
+        balance: response.balance || 0,
+      });
+      // Set default amount to the balance
+      setAmount(Math.abs(response.balance || 0).toFixed(2));
+    } catch (error) {
+      console.error('Failed to fetch friend balance:', error);
+      Alert.alert('Error', 'Failed to load settle details');
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const initials = friend
+    ? friend.friendName
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : '?';
 
   // ─── Cash / Card settlement (record only) ───────────────────────────────────
   const handleSettle = () => {
@@ -46,7 +82,7 @@ export default function SettleUpScreen() {
     }
     Alert.alert(
       'Settlement recorded! ✅',
-      `You recorded a ${selectedMethod} payment of ₹${parsed.toFixed(2)} to ${friend.user.name}.`,
+      `You recorded a ${selectedMethod} payment of ₹${parsed.toFixed(2)} to ${friend?.friendName}.`,
       [{ text: 'Done', onPress: () => router.back() }]
     );
   };
@@ -69,6 +105,47 @@ export default function SettleUpScreen() {
     }
   };
 
+    // Reset previous status if retrying
+    setPaymentStatus(null);
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    await initiatePayment({
+      amount: parsed * 100,                    // ₹ → paise
+      billerBillID: `TXN-${Date.now()}`,       // unique per transaction
+      note: note || `Settle up with ${friend?.friendName}`,
+    });
+  };
+
+  // ─── Poll for UPI status once platformBillID is available ──────────────────
+  useEffect(() => {
+    if (!platformBillID) return;
+
+    setPaymentStatus('BILL_CREATED');
+
+    pollIntervalRef.current = setInterval(async () => {
+      const status = await pollStatus();
+      if (!status) return;
+
+      setPaymentStatus(status);
+
+      if (TERMINAL_STATUSES.includes(status)) {
+        clearInterval(pollIntervalRef.current!);
+
+        if (status === 'PAYMENT_SUCCESSFUL') {
+          Alert.alert('✅ Payment Successful!', `₹${amount} received from ${friend?.friendName}.`, [
+            { text: 'Done', onPress: () => router.back() },
+          ]);
+        } else if (status === 'PAYMENT_FAILED') {
+          Alert.alert('❌ Payment Failed', 'The payment was not completed. You can retry.');
+        } else if (status === 'BILL_EXPIRED') {
+          Alert.alert('⏰ Link Expired', 'This payment link has expired. Generate a new one.');
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(pollIntervalRef.current!);
+  }, [platformBillID]);
+
   const methods: { icon: React.ComponentProps<typeof Ionicons>['name']; label: PaymentMethod }[] = [
     { icon: 'cash-outline',           label: 'Cash' },
     { icon: 'card-outline',           label: 'Card' },
@@ -80,55 +157,64 @@ export default function SettleUpScreen() {
       style={{ flex: 1, backgroundColor: '#0f0f1a' }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+      {loading ? (
+        <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#4ade80" />
+        </View>
+      ) : !friend ? (
+        <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+          <Text style={{ color: '#fff' }}>Friend not found</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
 
-        {/* Friend summary */}
-        <View style={styles.friendCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
+          {/* Friend summary */}
+          <View style={styles.friendCard}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+            <View>
+              <Text style={styles.settlingWith}>Settling up with</Text>
+              <Text style={styles.friendName}>{friend.friendName}</Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.settlingWith}>Settling up with</Text>
-            <Text style={styles.friendName}>{friend.user.name}</Text>
+
+          {/* Balance reminder */}
+          <View style={styles.balanceBanner}>
+            <Ionicons name="information-circle-outline" size={18} color="#0ea5e9" />
+            <Text style={styles.balanceText}>
+              {friend.balance < 0
+                ? `You owe ${friend.friendName.split(' ')[0]} ₹${Math.abs(friend.balance).toFixed(2)}`
+                : `${friend.friendName.split(' ')[0]} owes you ₹${friend.balance.toFixed(2)}`}
+            </Text>
           </View>
-        </View>
 
-        {/* Balance reminder */}
-        <View style={styles.balanceBanner}>
-          <Ionicons name="information-circle-outline" size={18} color="#0ea5e9" />
-          <Text style={styles.balanceText}>
-            {friend.balance < 0
-              ? `You owe ${friend.user.name.split(' ')[0]} ₹${Math.abs(friend.balance).toFixed(2)}`
-              : `${friend.user.name.split(' ')[0]} owes you ₹${friend.balance.toFixed(2)}`}
-          </Text>
-        </View>
+          {/* Amount */}
+          <Text style={styles.label}>Amount</Text>
+          <View style={styles.amountRow}>
+            <Text style={styles.currencySymbol}>₹</Text>
+            <TextInput
+              style={styles.amountInput}
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor="#444"
+            />
+          </View>
 
-        {/* Amount */}
-        <Text style={styles.label}>Amount</Text>
-        <View style={styles.amountRow}>
-          <Text style={styles.currencySymbol}>₹</Text>
-          <TextInput
-            style={styles.amountInput}
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-            placeholderTextColor="#444"
-          />
-        </View>
-
-        {/* Quick fill buttons */}
-        <View style={styles.quickRow}>
-          {[25, 50, 75, 100].map((pct) => (
-            <TouchableOpacity
-              key={pct}
-              style={styles.quickChip}
-              onPress={() => setAmount(((Math.abs(friend.balance) * pct) / 100).toFixed(2))}
-            >
-              <Text style={styles.quickChipText}>{pct}%</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+          {/* Quick fill buttons */}
+          <View style={styles.quickRow}>
+            {[25, 50, 75, 100].map((pct) => (
+              <TouchableOpacity
+                key={pct}
+                style={styles.quickChip}
+                onPress={() => setAmount(((Math.abs(friend.balance) * pct) / 100).toFixed(2))}
+              >
+                <Text style={styles.quickChipText}>{pct}%</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
         {/* Payment method selector */}
         <Text style={styles.label}>Payment method</Text>
@@ -202,7 +288,8 @@ export default function SettleUpScreen() {
         <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      )}
     </KeyboardAvoidingView>
   );
 }

@@ -1,7 +1,7 @@
 import { apiClient } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { Friend } from '@/types';
 
 type Step = 'details' | 'members' | 'review';
 
@@ -32,8 +33,29 @@ export default function NewGroupScreen() {
   const [description, setDescription] = useState('');
   const [currency, setCurrency] = useState('INR');
   const [memberEmail, setMemberEmail] = useState('');
-  const [members, setMembers] = useState<string[]>([]);
+  const [members, setMembers] = useState<{ email: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+
+  useEffect(() => {
+    if (step === 'members') {
+      fetchFriends();
+    }
+  }, [step]);
+
+  const fetchFriends = async () => {
+    try {
+      setLoadingFriends(true);
+      const response = await apiClient.getBalances();
+      setFriends(response.friends || []);
+    } catch (error) {
+      console.error('Failed to fetch friends:', error);
+      Alert.alert('Error', 'Failed to load friends');
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
 
   const validateGroupDetails = () => {
     if (!groupName.trim() || groupName.trim().length < 2) {
@@ -61,27 +83,37 @@ export default function NewGroupScreen() {
       return;
     }
 
-    if (members.includes(email)) {
+    if (members.some(m => m.email === email)) {
       Alert.alert('Error', 'This email is already added.');
       return;
     }
 
-    setMembers([...members, email]);
+    setMembers([...members, { email, name: email }]);
     setMemberEmail('');
   };
 
+  const handleAddFriend = (friend: Friend) => {
+    if (members.some(m => m.email === friend.user.email)) {
+      Alert.alert('Already Added', `${friend.user.name} is already in the group.`);
+      return;
+    }
+    
+    setMembers([...members, { email: friend.user.email, name: friend.user.name }]);
+  };
+
   const handleRemoveMember = (email: string) => {
-    setMembers(members.filter(m => m !== email));
+    setMembers(members.filter(m => m.email !== email));
   };
 
   const handleCreateGroup = async () => {
     setLoading(true);
     try {
+      const memberEmails = members.map(m => m.email);
       const response = await apiClient.createGroup(
         groupName.trim(),
         description.trim() || undefined,
         currency,
-        members
+        memberEmails
       );
 
       Alert.alert('Success', 'Group created successfully!', [
@@ -193,7 +225,59 @@ export default function NewGroupScreen() {
           </View>
 
           <View style={styles.form}>
-            <Text style={styles.label}>Member Email</Text>
+            {/* Friends List */}
+            {loadingFriends ? (
+              <ActivityIndicator size="large" color="#e94560" style={{ marginVertical: 20 }} />
+            ) : friends.length > 0 ? (
+              <>
+                <Text style={styles.label}>Quick Add: Your Friends</Text>
+                <View style={styles.friendsList}>
+                  {friends.map((friend) => {
+                    const isAdded = members.some(m => m.email === friend.user.email);
+                    return (
+                      <TouchableOpacity
+                        key={friend.id}
+                        style={[styles.friendItem, isAdded && styles.friendItemAdded]}
+                        onPress={() => handleAddFriend(friend)}
+                        disabled={isAdded}
+                        activeOpacity={isAdded ? 1 : 0.7}
+                      >
+                        <View style={styles.friendInfo}>
+                          <View style={styles.friendAvatar}>
+                            <Text style={styles.friendAvatarText}>
+                              {friend.user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.friendName}>{friend.user.name}</Text>
+                            <Text style={styles.friendEmail}>{friend.user.email}</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={[
+                            styles.friendAddBtn,
+                            isAdded && styles.friendAddBtnActive,
+                          ]}
+                          onPress={() => handleAddFriend(friend)}
+                          disabled={isAdded}
+                        >
+                          <Ionicons
+                            name={isAdded ? 'checkmark' : 'add'}
+                            size={20}
+                            color={isAdded ? '#fff' : '#e94560'}
+                          />
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            ) : (
+              <Text style={styles.hint}>No friends yet. Add friends first to select them here.</Text>
+            )}
+
+            {/* Manual Email Input */}
+            <Text style={[styles.label, { marginTop: 20 }]}>Or Add by Email</Text>
             <View style={styles.inputGroup}>
               <TextInput
                 style={styles.input}
@@ -217,14 +301,17 @@ export default function NewGroupScreen() {
             {members.length > 0 && (
               <View style={styles.membersList}>
                 <Text style={styles.label}>Added Members ({members.length})</Text>
-                {members.map((email, index) => (
+                {members.map((member, index) => (
                   <View key={index} style={styles.memberItem}>
                     <View style={styles.memberInfo}>
                       <Ionicons name="person-circle" size={28} color="#e94560" />
-                      <Text style={styles.memberEmail}>{email}</Text>
+                      <View>
+                        <Text style={styles.memberEmail}>{member.name}</Text>
+                        <Text style={styles.memberEmailSmall}>{member.email}</Text>
+                      </View>
                     </View>
                     <TouchableOpacity
-                      onPress={() => handleRemoveMember(email)}
+                      onPress={() => handleRemoveMember(member.email)}
                       activeOpacity={0.7}
                     >
                       <Ionicons name="close-circle" size={24} color="#666" />
@@ -236,7 +323,7 @@ export default function NewGroupScreen() {
 
             <Text style={styles.hint}>
               {members.length === 0
-                ? 'Add members by email. You can add more after creating the group.'
+                ? 'Add members from your friends or by email. You can add more after creating the group.'
                 : `${members.length} member(s) added`}
             </Text>
 
@@ -311,11 +398,14 @@ export default function NewGroupScreen() {
                 </View>
               </View>
             </View>
-            {members.map((email, index) => (
+            {members.map((member, index) => (
               <View key={index} style={styles.memberItem}>
                 <View style={styles.memberInfo}>
                   <Ionicons name="person-circle" size={28} color="#888" />
-                  <Text style={styles.memberEmail}>{email}</Text>
+                  <View>
+                    <Text style={styles.memberEmail}>{member.name}</Text>
+                    <Text style={styles.memberEmailSmall}>{member.email}</Text>
+                  </View>
                 </View>
               </View>
             ))}
@@ -554,6 +644,70 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+  friendsList: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  friendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+    borderRadius: 10,
+    padding: 12,
+  },
+  friendItemAdded: {
+    backgroundColor: '#00c85315',
+    borderColor: '#00c853',
+  },
+  friendInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  friendAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e94560',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  friendAvatarText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  friendName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  friendEmail: {
+    color: '#888',
+    fontSize: 12,
+  },
+  friendAddBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#e94560',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  friendAddBtnActive: {
+    backgroundColor: '#00c853',
+    borderColor: '#00c853',
+  },
+  memberEmailSmall: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 2,
   },
   buttonDisabled: {
     opacity: 0.6,

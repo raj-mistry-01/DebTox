@@ -11,8 +11,20 @@ function initExpenseModel(sequelize) {
       },
       groupId: {
         type: DataTypes.BIGINT,
-        allowNull: false,
+        allowNull: true, // null for friend-to-friend expenses
         field: 'group_id',
+      },
+      expenseType: {
+        type: DataTypes.ENUM('group', 'friend'),
+        allowNull: false,
+        defaultValue: 'group',
+        field: 'expense_type',
+        comment: 'group = within a group, friend = direct friend payment',
+      },
+      friendUserId: {
+        type: DataTypes.BIGINT,
+        allowNull: true, // the friend involved in friend-type expense
+        field: 'friend_user_id',
       },
       paidByUserId: {
         type: DataTypes.BIGINT,

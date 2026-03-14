@@ -49,13 +49,18 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [marking, setMarking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = async () => {
     try {
       const response = await apiClient.getNotifications(50, 0);
       setNotifications(response.notifications || []);
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch notifications';
+      console.error('Failed to fetch notifications:', err);
+      setError(errorMsg);
+      Alert.alert('Error', errorMsg);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -154,7 +159,26 @@ export default function NotificationsScreen() {
       </View>
 
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {notifications.length > 0 ? (
+        {error ? (
+          <View style={{ alignItems: 'center', marginTop: 32 }}>
+            <ThemedText style={{ opacity: 0.7, fontSize: 16, marginBottom: 16 }}>
+              {error}
+            </ThemedText>
+            <TouchableOpacity
+              onPress={fetchNotifications}
+              style={{
+                backgroundColor: '#e94560',
+                paddingHorizontal: 24,
+                paddingVertical: 10,
+                borderRadius: 6,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : notifications.length > 0 ? (
           notifications.map((notification) => (
             <TouchableOpacity
               key={notification.id}

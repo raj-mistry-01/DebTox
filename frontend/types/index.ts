@@ -10,9 +10,19 @@ export interface User {
 export interface Group {
   id: string;
   name: string;
+  description?: string;
+  currency?: string;
+  createdBy?: string;
+  createdAt?: string;
   emoji?: string;
   members: User[];
-  netBalance: number; // positive = owed to you, negative = you owe
+  netBalance?: number; // positive = owed to you, negative = you owe
+  expenses?: Expense[]; // from backend response
+  userBalances?: Array<{
+    fromUser: User;
+    toUser: User;
+    amount: number;
+  }>;
 }
 
 export interface Expense {

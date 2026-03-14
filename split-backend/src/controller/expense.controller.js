@@ -1,4 +1,4 @@
-import { Expense, ExpenseShare, Group, GroupMember, Balance, User } from '../model/index.js';
+import { Expense, ExpenseShare, Group, GroupMember, Balance, User, OptimizedTransaction } from '../model/index.js';
 import sequelize from '../db/sequelize.js';
 
 async function createExpense(req, res) {
@@ -14,21 +14,24 @@ async function createExpense(req, res) {
       splits, // [{ userId, shareAmount }]
     } = req.body;
 
-    if (!groupId || !title || !amount || !splits) {
+    // Validate required fields - groupId is optional (null for friend expenses)
+    if (!title || !amount || !splits) {
       return res.status(400).json({
-        message: 'groupId, title, amount, and splits are required',
+        message: 'title, amount, and splits are required',
       });
     }
 
-    // Verify user is member
-    const membership = await GroupMember.findOne(
-      { where: { groupId, userId: req.user.sub } },
-      { transaction }
-    );
+    // Verify user is member of group (only for group expenses)
+    if (groupId) {
+      const membership = await GroupMember.findOne(
+        { where: { groupId, userId: req.user.sub } },
+        { transaction }
+      );
 
-    if (!membership) {
-      await transaction.rollback();
-      return res.status(403).json({ message: 'Not a member of this group' });
+      if (!membership) {
+        await transaction.rollback();
+        return res.status(403).json({ message: 'Not a member of this group' });
+      }
     }
 
     const expense = await Expense.create(
@@ -58,15 +61,17 @@ async function createExpense(req, res) {
 
     await Promise.all(sharePromises);
 
-    // Update balances
+    // Update balances - round to 2 decimals to avoid floating point errors
     for (const split of splits) {
       if (split.userId === req.user.sub) continue; // Skip self
 
-      const shareAmount = parseFloat(split.shareAmount);
+      const shareAmount = parseFloat(parseFloat(split.shareAmount).toFixed(2));
+      const gId = groupId || null; // Handle null for friend expenses
+      
       const existing = await Balance.findOne(
         {
           where: {
-            groupId,
+            groupId: gId,
             fromUserId: split.userId,
             toUserId: req.user.sub,
           },
@@ -75,14 +80,16 @@ async function createExpense(req, res) {
       );
 
       if (existing) {
+        // Update with rounded value
+        const newAmount = parseFloat((existing.netAmount + shareAmount).toFixed(2));
         await existing.update(
-          { netAmount: sequelize.literal(`net_amount + ${shareAmount}`) },
+          { netAmount: newAmount },
           { transaction }
         );
       } else {
         await Balance.create(
           {
-            groupId,
+            groupId: gId,
             fromUserId: split.userId,
             toUserId: req.user.sub,
             netAmount: shareAmount,
@@ -100,6 +107,11 @@ async function createExpense(req, res) {
         { model: ExpenseShare, as: 'shares', include: [{ model: User }] },
       ],
     });
+
+    // Invalidate simplified debts cache (only for group expenses)
+    if (groupId) {
+      await OptimizedTransaction.destroy({ where: { groupId } });
+    }
 
     return res.status(201).json({
       message: 'Expense created',
@@ -142,13 +154,15 @@ async function getExpense(req, res) {
       return res.status(404).json({ message: 'Expense not found' });
     }
 
-    // Verify user is member of group
-    const membership = await GroupMember.findOne({
-      where: { groupId: expense.groupId, userId: req.user.sub },
-    });
+    // Verify user is member of group (only for group expenses)
+    if (expense.groupId) {
+      const membership = await GroupMember.findOne({
+        where: { groupId: expense.groupId, userId: req.user.sub },
+      });
 
-    if (!membership) {
-      return res.status(403).json({ message: 'Not a member of this group' });
+      if (!membership) {
+        return res.status(403).json({ message: 'Not a member of this group' });
+      }
     }
 
     return res.status(200).json({
@@ -227,6 +241,9 @@ async function deleteExpense(req, res) {
     await expense.destroy({ transaction });
 
     await transaction.commit();
+
+    // Invalidate simplified debts cache for this group
+    await OptimizedTransaction.destroy({ where: { groupId: expense.groupId } });
 
     return res.status(200).json({ message: 'Expense deleted' });
   } catch (error) {

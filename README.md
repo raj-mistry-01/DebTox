@@ -321,13 +321,6 @@ npm run android
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details
-
-## 👥 Author
-
-Raj Mistry - [GitHub](https://github.com/raj-mistry-01)
 
 ## 🙏 Acknowledgments
 
@@ -338,4 +331,4 @@ Raj Mistry - [GitHub](https://github.com/raj-mistry-01)
 
 ---
 
-**Built with ❤️ to simplify group finances**
+# Team - FinTech Capital

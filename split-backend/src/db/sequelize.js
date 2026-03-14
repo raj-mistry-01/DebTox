@@ -34,12 +34,23 @@ function buildConnectionStringFromEnv() {
 
 const supabaseConnectionString = buildConnectionStringFromEnv();
 
+console.log('🔍 Database Configuration:');
+console.log(`  - Using: ${supabaseConnectionString ? 'Supabase (DATABASE_URL)' : 'Local PostgreSQL'}`);
+if (supabaseConnectionString) {
+  const urlObj = new URL(supabaseConnectionString);
+  console.log(`  - Host: ${urlObj.hostname}`);
+  console.log(`  - Pool: max=${baseConfig.pool.max}, min=${baseConfig.pool.min}, acquire=${baseConfig.pool.acquire}ms`);
+}
+
 const sequelize = supabaseConnectionString
   ? new Sequelize(supabaseConnectionString, {
       ...baseConfig,
       dialectOptions: {
         ssl: { rejectUnauthorized: false },
+        statement_timeout: 30000,  // 30s per statement
       },
+      acquireTimeoutMillis: 30000,  // 30s to acquire connection
+      idleTimeoutMillis: 30000,
     })
   : new Sequelize(DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
       ...baseConfig,

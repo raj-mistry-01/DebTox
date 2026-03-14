@@ -108,11 +108,11 @@ export default function GroupsScreen() {
       <View style={styles.summaryRow}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Total owed</Text>
-          <Text style={[styles.summaryValue, { color: '#4ade80' }]}>${totalOwed.toFixed(2)}</Text>
+          <Text style={[styles.summaryValue, { color: '#4ade80' }]}>₹{totalOwed.toFixed(2)}</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>You owe</Text>
-          <Text style={[styles.summaryValue, { color: '#f87171' }]}>${totalOwe.toFixed(2)}</Text>
+          <Text style={[styles.summaryValue, { color: '#f87171' }]}>₹{totalOwe.toFixed(2)}</Text>
         </View>
       </View>
 

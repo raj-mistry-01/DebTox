@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useCallback, useState } from 'react';
 
 // Match the ngrok proxy being used in api.ts
-const BACKEND_URL = 'https://78c0-2401-4900-ae38-3c49-2030-19e8-5407-3fac.ngrok-free.app'
+const BACKEND_URL = 'https://d02b-2401-4900-ae38-3c49-2030-19e8-5407-3fac.ngrok-free.app'
 
 const api = axios.create({
   baseURL: BACKEND_URL + '/api/v1/payments',

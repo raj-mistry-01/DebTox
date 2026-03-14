@@ -160,6 +160,98 @@ const emailTemplates = {
       </html>
     `,
   }),
+
+  cashPaymentSent: (payerName, payeeName, amount, paymentId, appUrl) => ({
+    subject: `💵 Cash Payment Sent - ${payeeName}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; }
+            .header { border-bottom: 3px solid #4ade80; padding-bottom: 20px; margin-bottom: 30px; }
+            .logo { font-size: 24px; font-weight: bold; color: #4ade80; }
+            .content { color: #333; line-height: 1.6; }
+            .details { background: #f0f0f0; padding: 16px; border-radius: 8px; margin: 20px 0; }
+            .details p { margin: 6px 0; }
+            .amount { font-size: 28px; font-weight: bold; color: #4ade80; }
+            .action-btn { background-color: #4ade80; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; display: inline-block; margin: 20px 0; }
+            .footer { border-top: 1px solid #ddd; margin-top: 30px; padding-top: 20px; font-size: 12px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">💸 Debtox</div>
+            </div>
+            <div class="content">
+              <p>Hi ${payerName},</p>
+              <p>Your cash payment has been recorded successfully! ✅</p>
+              <div class="details">
+                <p><strong>Paid to:</strong> ${payeeName}</p>
+                <p class="amount">₹${parseFloat(amount).toFixed(2)}</p>
+                <p><strong>Transaction ID:</strong> ${paymentId}</p>
+              </div>
+              <p>Your account balance has been updated to reflect this payment.</p>
+              <a href="${appUrl}" class="action-btn">View Your Transactions</a>
+            </div>
+            <div class="footer">
+              <p>© 2024 Debtox. All rights reserved.</p>
+              <p>This is an automated email. Please do not reply.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `,
+  }),
+
+  cashPaymentReceived: (payerName, payeeName, amount, paymentId, appUrl) => ({
+    subject: `💵 Cash Payment Received - ${payerName}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; }
+            .header { border-bottom: 3px solid #4ade80; padding-bottom: 20px; margin-bottom: 30px; }
+            .logo { font-size: 24px; font-weight: bold; color: #4ade80; }
+            .content { color: #333; line-height: 1.6; }
+            .details { background: #f0f0f0; padding: 16px; border-radius: 8px; margin: 20px 0; }
+            .details p { margin: 6px 0; }
+            .amount { font-size: 28px; font-weight: bold; color: #4ade80; }
+            .action-btn { background-color: #4ade80; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; display: inline-block; margin: 20px 0; }
+            .footer { border-top: 1px solid #ddd; margin-top: 30px; padding-top: 20px; font-size: 12px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">💸 Debtox</div>
+            </div>
+            <div class="content">
+              <p>Hi ${payeeName},</p>
+              <p>Great news! You received a cash payment! 🎉</p>
+              <div class="details">
+                <p><strong>Received from:</strong> ${payerName}</p>
+                <p class="amount">₹${parseFloat(amount).toFixed(2)}</p>
+                <p><strong>Transaction ID:</strong> ${paymentId}</p>
+              </div>
+              <p>Your account balance has been updated to reflect this payment.</p>
+              <a href="${appUrl}" class="action-btn">View Your Transactions</a>
+            </div>
+            <div class="footer">
+              <p>© 2024 Debtox. All rights reserved.</p>
+              <p>This is an automated email. Please do not reply.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `,
+  }),
 };
 
 // Initialize transporter - will be configured with environment variables
@@ -363,6 +455,68 @@ async function sendPaymentReceiptEmail(receiverEmail, receiverName, amount, merc
   }
 }
 
+async function sendCashPaymentSentEmail(payerEmail, payerName, payeeName, amount, paymentId) {
+  try {
+    await ensureTransporter();
+
+    if (!transporter) {
+      console.warn('Email service not configured, skipping email');
+      return null;
+    }
+
+    const appUrl = process.env.APP_URL || 'https://debtox.app';
+    const template = emailTemplates.cashPaymentSent(payerName, payeeName, amount, paymentId, appUrl);
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@debtox.app',
+      to: payerEmail,
+      subject: template.subject,
+      html: template.html,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`[Cash Payment] 📧 Sent email to payer: ${payerEmail}`);
+    if (isTestTransporter) {
+      console.log('Preview URL:', nodemailer.getTestMessageUrl(result));
+    }
+    return result;
+  } catch (error) {
+    console.error('Failed to send cash payment sent email:', error.message);
+    return null;
+  }
+}
+
+async function sendCashPaymentReceivedEmail(payeeEmail, payerName, payeeName, amount, paymentId) {
+  try {
+    await ensureTransporter();
+
+    if (!transporter) {
+      console.warn('Email service not configured, skipping email');
+      return null;
+    }
+
+    const appUrl = process.env.APP_URL || 'https://debtox.app';
+    const template = emailTemplates.cashPaymentReceived(payerName, payeeName, amount, paymentId, appUrl);
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@debtox.app',
+      to: payeeEmail,
+      subject: template.subject,
+      html: template.html,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`[Cash Payment] 📧 Sent email to payee: ${payeeEmail}`);
+    if (isTestTransporter) {
+      console.log('Preview URL:', nodemailer.getTestMessageUrl(result));
+    }
+    return result;
+  } catch (error) {
+    console.error('Failed to send cash payment received email:', error.message);
+    return null;
+  }
+}
+
 // Initialize on module load
 initializeTransporter();
 
@@ -371,5 +525,7 @@ export {
   sendFriendAcceptedEmail,
   sendLoginNotificationEmail,
   sendPaymentReceiptEmail,
+  sendCashPaymentSentEmail,
+  sendCashPaymentReceivedEmail,
   initializeTransporter,
 };

@@ -113,12 +113,12 @@ export default function FriendsScreen() {
       <View style={styles.banner}>
         <View style={styles.bannerItem}>
           <Text style={styles.bannerLabel}>Friends owe you</Text>
-          <Text style={[styles.bannerValue, { color: '#4ade80' }]}>${totalOwedByFriends.toFixed(2)}</Text>
+          <Text style={[styles.bannerValue, { color: '#4ade80' }]}>₹{totalOwedByFriends.toFixed(2)}</Text>
         </View>
         <View style={styles.bannerDivider} />
         <View style={styles.bannerItem}>
           <Text style={styles.bannerLabel}>You owe friends</Text>
-          <Text style={[styles.bannerValue, { color: '#f87171' }]}>${totalOweToFriends.toFixed(2)}</Text>
+          <Text style={[styles.bannerValue, { color: '#f87171' }]}>₹{totalOweToFriends.toFixed(2)}</Text>
         </View>
       </View>
 

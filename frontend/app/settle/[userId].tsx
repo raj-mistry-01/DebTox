@@ -79,17 +79,66 @@ export default function SettleUpScreen() {
     : '?';
 
   // ─── Cash / Card settlement (record only) ───────────────────────────────────
-  const handleSettle = () => {
+  const handleSettle = async () => {
     const parsed = parseFloat(amount);
     if (isNaN(parsed) || parsed <= 0) {
       Alert.alert('Error', 'Please enter a valid amount.');
       return;
     }
-    Alert.alert(
-      'Settlement recorded! ✅',
-      `You recorded a ${selectedMethod} payment of ₹${parsed.toFixed(2)} to ${friend?.friendName}.`,
-      [{ text: 'Done', onPress: () => router.back() }]
-    );
+
+    // Warn if paying more than owed
+    const amountOwed = Math.abs(friend?.balance || 0);
+    if (parsed > amountOwed + 0.01) {
+      Alert.alert(
+        'Overpayment',
+        `You owe ₹${amountOwed.toFixed(2)} but entered ₹${parsed.toFixed(2)}. Continue?`,
+        [
+          { text: 'Edit Amount', onPress: () => {} },
+          { text: 'Continue', onPress: () => recordPayment(parsed) },
+        ]
+      );
+      return;
+    }
+
+    recordPayment(parsed);
+  };
+
+  const recordPayment = async (parsed: number) => {
+    try {
+      setIsChecking(true);
+
+      if (selectedMethod === 'Cash') {
+        // Call cash payment API
+        const result = await apiClient.recordCashPayment(userId!, parsed);
+        console.log('✅ Cash payment recorded:', result);
+
+        // Wait a bit to ensure DB updates are processed
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        Alert.alert('✅ Cash Payment Recorded!', `₹${parsed.toFixed(2)} paid successfully to ${friend?.friendName}`, [
+          {
+            text: 'Back to Friends',
+            onPress: () => {
+              console.log('Navigating back to friends list...');
+              router.back();
+            },
+          },
+        ]);
+      } else {
+        // For Card or other methods, just show confirmation
+        Alert.alert(
+          'Settlement recorded! ✅',
+          `You recorded a ${selectedMethod} payment of ₹${parsed.toFixed(2)} to ${friend?.friendName}.`,
+          [{ text: 'Done', onPress: () => router.back() }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Payment recording error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Payment could not be recorded';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsChecking(false);
+    }
   };
 
   // ─── UPI settlement via UroPay ────────────────────────────────────────────────
@@ -409,12 +458,19 @@ export default function SettleUpScreen() {
           )
         ) : (
           <TouchableOpacity
-            style={styles.settleBtn}
+            style={[styles.settleBtn, isChecking && styles.btnDisabled]}
             onPress={handleSettle}
+            disabled={isChecking}
             activeOpacity={0.85}
           >
-            <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-            <Text style={styles.settleBtnText}>Record {selectedMethod} Payment</Text>
+            {isChecking ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                <Text style={styles.settleBtnText}>Record {selectedMethod} Payment</Text>
+              </>
+            )}
           </TouchableOpacity>
         )}
 

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Op } from 'sequelize';
 import { Payment, Balance, Notification, User } from '../model/index.js';
-import { sendPaymentReceiptEmail } from '../services/emailService.js';
+import { sendPaymentReceiptEmail, sendCashPaymentSentEmail, sendCashPaymentReceivedEmail } from '../services/emailService.js';
 
 
 // ─── Read env vars ────────────────────────────────────────────────────────────
@@ -260,5 +260,142 @@ export async function finalizePayment(req, res) {
   } catch (error) {
     console.error('[Payment Finalize] ❌ Error:', error.message);
     return res.status(500).json({ message: 'Payment finalization failed', error: error.message });
+  }
+}
+
+// ─── Record Cash Payment: Direct recording without verification ────────────────
+export async function recordCashPayment(req, res) {
+  try {
+    const userId = req.user?.sub || req.user?.id;  // JWT uses 'sub', fallback to 'id'
+    const { friendId, amount } = req.body;
+
+    if (!userId || !friendId || !amount) {
+      return res.status(400).json({ message: 'Missing required fields: friendId, amount' });
+    }
+
+    if (userId === friendId) {
+      return res.status(400).json({ message: 'Cannot pay yourself' });
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (parsedAmount <= 0) {
+      return res.status(400).json({ message: 'Amount must be positive' });
+    }
+
+    console.log(`[Cash Payment] 💵 Recording: ${userId} → ${friendId}, ₹${parsedAmount}`);
+
+    // 1. Create Payment record
+    const payment = await Payment.create({
+      payerId: userId,
+      payeeId: friendId,
+      amount: Math.round(parsedAmount * 100) / 100,
+      method: 'cash',  // Cash payment method
+      status: 'completed',
+    });
+
+    console.log(`[Cash Payment] ✅ Payment record created: ${payment.id}`);
+
+    // 2. Update Balance (reduce debt) - same logic as UPI
+    const balances = await Balance.findAll({
+      where: {
+        [Op.or]: [
+          { fromUserId: userId, toUserId: friendId },
+          { fromUserId: friendId, toUserId: userId },
+        ],
+      },
+    });
+
+    console.log(`[Cash Payment] 🔍 Found ${balances.length} balance records between user ${userId} and friend ${friendId}`);
+    
+    if (balances.length > 0) {
+      for (const balance of balances) {
+        const oldAmount = balance.netAmount;
+        console.log(`[Cash Payment] 📊 Processing balance: ID=${balance.id}, from=${balance.fromUserId}, to=${balance.toUserId}, oldAmount=${oldAmount}`);
+        
+        // Calculate new amount - payment reduces debt
+        const newAmount = oldAmount - parsedAmount;
+        
+        console.log(`[Cash Payment] 💾 Reduced by ₹${parsedAmount} → new amount = ₹${newAmount}`);
+        
+        // Delete if ≈ 0 OR would go negative (overpayment)
+        if (Math.abs(newAmount) < 0.01 || newAmount < 0) {
+          await balance.destroy();
+          console.log(`[Cash Payment] 🗑️  Balance settled/overpaid, record deleted`);
+        } else {
+          // Update with positive amount only
+          balance.netAmount = newAmount;
+          await balance.save();
+          console.log(`[Cash Payment] ⚖️  Balance updated: ₹${balance.netAmount}`);
+        }
+      }
+    } else {
+      console.log(`[Cash Payment] ⚠️  No balance records found! This is unexpected.`);
+    }
+
+    // 3. Create notifications for both users
+    const payer = await User.findByPk(userId);
+    const payee = await User.findByPk(friendId);
+
+    // Send payment sent email to payer
+    if (payer?.email) {
+      sendCashPaymentSentEmail(
+        payer.email,
+        payer.name,
+        payee?.name || 'Friend',
+        parsedAmount,
+        payment.id
+      ).catch((err) => {
+        console.log(`[Cash Payment] ⚠️  Email to payer failed: ${err.message}`);
+      });
+    }
+
+    // Send payment received email to payee
+    if (payee?.email) {
+      sendCashPaymentReceivedEmail(
+        payee.email,
+        payer?.name || 'Someone',
+        payee.name,
+        parsedAmount,
+        payment.id
+      ).catch((err) => {
+        console.log(`[Cash Payment] ⚠️  Email to payee failed: ${err.message}`);
+      });
+    }
+
+    // Notification to payee (receiver)
+    await Notification.create({
+      userId: friendId,
+      type: 'payment_received',
+      title: 'Cash Payment Received',
+      message: `${payer?.name || 'Someone'} paid you ₹${parsedAmount.toFixed(2)} in cash`,
+      relatedId: payment.id,
+      isRead: false,
+    });
+
+    // Notification to payer (sender)
+    await Notification.create({
+      userId: userId,
+      type: 'payment_received',
+      title: 'Cash Payment Sent',
+      message: `You paid ${payee?.name || 'Friend'} ₹${parsedAmount.toFixed(2)} in cash`,
+      relatedId: payment.id,
+      isRead: false,
+    });
+
+    console.log(`[Cash Payment] 🔔 Notifications and emails sent to both users`);
+
+    return res.status(200).json({
+      success: true,
+      payment: {
+        id: payment.id,
+        amount: parsedAmount,
+        status: 'completed',
+        method: 'cash',
+        message: `Cash payment of ₹${parsedAmount.toFixed(2)} recorded successfully`,
+      },
+    });
+  } catch (error) {
+    console.error('[Cash Payment] ❌ Error:', error.message);
+    return res.status(500).json({ message: 'Cash payment recording failed', error: error.message });
   }
 }

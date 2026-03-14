@@ -12,11 +12,11 @@ const router = express.Router();
 // All routes require authentication
 router.use(requireAuth);
 
+// Get unread count (for badge) - MUST come before generic GET /
+router.get('/unread', getUnreadNotificationCount);
+
 // Get all notifications
 router.get('/', getNotificationsList);
-
-// Get unread count (for badge)
-router.get('/unread', getUnreadNotificationCount);
 
 // Mark all notifications as read
 router.put('/read-all', readAllNotifications);

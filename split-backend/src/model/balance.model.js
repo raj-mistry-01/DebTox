@@ -11,7 +11,7 @@ function initBalanceModel(sequelize) {
       },
       groupId: {
         type: DataTypes.BIGINT,
-        allowNull: false,
+        allowNull: true,  // Allow null for friend-to-friend balances
         field: 'group_id',
       },
       fromUserId: {

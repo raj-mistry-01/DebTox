@@ -35,6 +35,10 @@ export default function SettleUpScreen() {
   const [note, setNote] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('Cash');
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [upiTxnId, setUpiTxnId] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   const { loading: isGeneratingQR, generateQRCode } = useUroPay();
 
@@ -96,6 +100,24 @@ export default function SettleUpScreen() {
       return;
     }
 
+    // Warn if paying more than owed
+    const amountOwed = Math.abs(friend?.balance || 0);
+    if (parsed > amountOwed + 0.01) {
+      Alert.alert(
+        'Overpayment',
+        `You owe ₹${amountOwed.toFixed(2)} but entered ₹${parsed.toFixed(2)}. Continue?`,
+        [
+          { text: 'Edit Amount', onPress: () => {} },
+          { text: 'Continue', onPress: () => continueUPIPayment(parsed) },
+        ]
+      );
+      return;
+    }
+
+    continueUPIPayment(parsed);
+  };
+
+  const continueUPIPayment = async (parsed: number) => {
     if (!friend?.upiId) {
       Alert.alert('Error', 'Receiver UPI not available. Cannot generate QR code.');
       return;
@@ -108,10 +130,88 @@ export default function SettleUpScreen() {
       friend.upiId  // Pass receiver's UPI
     );
     
-    if (order?.qrCode) {
+    if (order?.qrCode && order?.uroPayOrderId) {
       setQrCode(order.qrCode);
+      setOrderId(order.uroPayOrderId);
+      setPaymentSuccess(false);
     } else {
       Alert.alert('Error', 'Could not generate UPI QR Code. Try again.');
+    }
+  };
+
+  // ─── Check payment status (1-5 hidden attempts) ────────────────────────────
+  const handleCheckPayment = async () => {
+    if (!upiTxnId.trim()) {
+      Alert.alert('Error', 'Please enter UPI Transaction ID');
+      return;
+    }
+
+    if (!orderId) {
+      Alert.alert('Error', 'Order not initialized');
+      return;
+    }
+
+    setIsChecking(true);
+    
+    try {
+      const response = await apiClient.checkPaymentStatus(orderId);
+      console.log('Payment check response:', response);
+
+      if (response.isVerified) {
+        setPaymentSuccess(true);
+        Alert.alert('✅ Success', 'Payment verified! Click Done to complete.');
+      } else {
+        Alert.alert('Checking...', 'Payment verification in progress. Tap again to check.');
+      }
+    } catch (error) {
+      console.error('Payment check error:', error);
+      Alert.alert('Error', 'Failed to check payment status');
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  // ─── Finalize payment and redirect ─────────────────────────────────────────
+  const handleDone = async () => {
+    if (!orderId || !upiTxnId || !paymentSuccess) {
+      Alert.alert('Error', 'Payment verification incomplete');
+      return;
+    }
+
+    try {
+      setIsChecking(true);
+      const parsed = parseFloat(amount);
+      
+      console.log('Finalizing payment:', { userId, friendId: userId, amount: parsed, upiTxnId, orderId });
+      
+      const result = await apiClient.finalizePayment(
+        userId!,
+        parsed,
+        upiTxnId,
+        orderId
+      );
+
+      console.log('✅ Payment finalized successfully:', result);
+
+      // Wait a bit to ensure DB updates are processed
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      Alert.alert('✅ Payment Recorded!', `₹${parsed.toFixed(2)} paid successfully to ${friend?.friendName}`, [
+        {
+          text: 'Back to Friends',
+          onPress: () => {
+            console.log('Navigating back to friends list...');
+            router.back();
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error('❌ Finalization error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Payment could not be recorded';
+      Alert.alert('Error', errorMessage);
+      setPaymentSuccess(false);
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -221,10 +321,74 @@ export default function SettleUpScreen() {
         {selectedMethod === 'UPI' ? (
           qrCode ? (
             <View style={{ alignItems: 'center', marginTop: 30 }}>
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 16 }}>Scan to Pay via UPI</Text>
-              <View style={{ backgroundColor: '#fff', padding: 12, borderRadius: 16 }}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 16 }}>
+                {paymentSuccess ? '✅ Payment Verified!' : 'Scan to Pay via UPI'}
+              </Text>
+              <View style={{ backgroundColor: '#fff', padding: 12, borderRadius: 16, marginBottom: 20 }}>
                 <Image source={{ uri: qrCode }} style={{ width: 220, height: 220 }} resizeMode="contain" />
               </View>
+
+              {/* UPI Transaction ID Input */}
+              {!paymentSuccess && (
+                <View style={{ width: '100%', marginBottom: 16 }}>
+                  <Text style={{ color: '#4ade80', fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
+                    Enter UPI Transaction ID from SMS
+                  </Text>
+                  <TextInput
+                    style={{
+                      backgroundColor: '#1a1a2e',
+                      borderWidth: 1,
+                      borderColor: '#2a2a3e',
+                      borderRadius: 12,
+                      padding: 12,
+                      color: '#fff',
+                      fontSize: 14,
+                    }}
+                    value={upiTxnId}
+                    onChangeText={setUpiTxnId}
+                    placeholder="e.g., 413267809430"
+                    placeholderTextColor="#555"
+                    editable={!isChecking}
+                  />
+                </View>
+              )}
+
+              {/* Check Payment Button */}
+              {!paymentSuccess && (
+                <TouchableOpacity
+                  style={[styles.settleBtn, isChecking && styles.btnDisabled]}
+                  onPress={handleCheckPayment}
+                  disabled={isChecking}
+                  activeOpacity={0.85}
+                >
+                  {isChecking ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                      <Text style={styles.settleBtnText}>Check Payment</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {paymentSuccess && (
+                <TouchableOpacity
+                  style={[styles.settleBtn, isChecking && styles.btnDisabled]}
+                  onPress={handleDone}
+                  disabled={isChecking}
+                  activeOpacity={0.85}
+                >
+                  {isChecking ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-all" size={20} color="#fff" />
+                      <Text style={styles.settleBtnText}>Done</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <TouchableOpacity

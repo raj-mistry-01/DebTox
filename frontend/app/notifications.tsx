@@ -54,11 +54,14 @@ export default function NotificationsScreen() {
   const fetchNotifications = async () => {
     try {
       const response = await apiClient.getNotifications(50, 0);
+      console.log('📬 [Notifications] Response:', response);
+      console.log('📬 [Notifications] Notifications array:', response.notifications);
+      console.log('📬 [Notifications] Total count:', response.total);
       setNotifications(response.notifications || []);
       setError(null);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch notifications';
-      console.error('Failed to fetch notifications:', err);
+      console.error('❌ [Notifications] Failed to fetch notifications:', err);
       setError(errorMsg);
       Alert.alert('Error', errorMsg);
     } finally {
@@ -184,7 +187,7 @@ export default function NotificationsScreen() {
               key={notification.id}
               onPress={() => handleMarkAsRead(notification.id)}
               style={{
-                backgroundColor: notification.isRead ? '#f5f5f5' : '#fff',
+                backgroundColor: notification.isRead ? '#2a2a3e' : '#1a1a2e',
                 borderRadius: 8,
                 padding: 12,
                 marginBottom: 8,

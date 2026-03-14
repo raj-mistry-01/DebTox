@@ -98,7 +98,7 @@ export default function FriendRequestsScreen() {
             <View
               key={request.id}
               style={{
-                backgroundColor: '#f5f5f5',
+                backgroundColor: '#1a1a2e',
                 borderRadius: 8,
                 padding: 16,
                 marginBottom: 12,

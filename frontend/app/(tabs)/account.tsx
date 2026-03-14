@@ -1,7 +1,7 @@
 import { useAuth } from '@/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useEffect, useState, useCallback } from 'react';
 import {
     Alert,
     ScrollView,
@@ -23,12 +23,67 @@ type SettingRow = {
 export default function AccountScreen() {
   const { currentUser, logout } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [groupsCount, setGroupsCount] = useState(0);
+  const [friendsCount, setFriendsCount] = useState(0);
+  const [expensesCount, setExpensesCount] = useState(0);
 
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[Account] Screen focused, fetching counts...');
+      fetchCounts();
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }, [])
+  );
+
+  // Also fetch on mount
   useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
+    console.log('[Account] Component mounted, fetching counts...');
+    fetchCounts();
   }, []);
+
+  const fetchCounts = async () => {
+    try {
+      console.log('📊 [Accounts] Fetching counts...');
+      
+      // Fetch groups
+      try {
+        const groupsResponse = await apiClient.listGroups();
+        console.log('📊 [Accounts] Groups response:', groupsResponse);
+        setGroupsCount(groupsResponse?.groups?.length || 0);
+      } catch (e) {
+        console.error('❌ [Accounts] Groups error:', e);
+        setGroupsCount(0);
+      }
+
+      // Fetch friends
+      try {
+        const friendsResponse = await apiClient.getFriendsList();
+        console.log('📊 [Accounts] Friends response:', friendsResponse);
+        setFriendsCount(friendsResponse?.friends?.length || 0);
+      } catch (e) {
+        console.error('❌ [Accounts] Friends error:', e);
+        setFriendsCount(0);
+      }
+
+      // Fetch expenses (from activity)
+      try {
+        const activityResponse = await apiClient.getActivity();
+        console.log('📊 [Accounts] Activity response:', activityResponse);
+        const expenses = activityResponse?.activities?.filter((a: any) => a.type === 'expense') || [];
+        console.log('📊 [Accounts] Expenses count:', expenses.length);
+        setExpensesCount(expenses.length);
+      } catch (e) {
+        console.error('❌ [Accounts] Activity error:', e);
+        setExpensesCount(0);
+      }
+
+      // Fetch unread count
+      fetchUnreadCount();
+    } catch (error) {
+      console.error('❌ [Accounts] Failed to fetch counts:', error);
+    }
+  };
 
   const fetchUnreadCount = async () => {
     try {
@@ -124,9 +179,9 @@ export default function AccountScreen() {
       {/* Stats row */}
       <View style={styles.statsRow}>
         {[
-          { label: 'Groups', value: '4' },
-          { label: 'Friends', value: '3' },
-          { label: 'Expenses', value: '12' },
+          { label: 'Groups', value: groupsCount.toString() },
+          { label: 'Friends', value: friendsCount.toString() },
+          { label: 'Expenses', value: expensesCount.toString() },
         ].map((s) => (
           <View key={s.label} style={styles.statCard}>
             <Text style={styles.statValue}>{s.value}</Text>

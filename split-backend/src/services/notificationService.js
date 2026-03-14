@@ -1,4 +1,4 @@
-import { Notification } from '../model/index.js';
+import { Notification, User } from '../model/index.js';
 
 async function createNotification(userId, type, title, message, relatedUserId = null, relatedId = null) {
   try {
@@ -27,7 +27,7 @@ async function getNotifications(userId, limit = 20, offset = 0) {
       offset,
       include: [
         {
-          model: require('../model/index.js').User,
+          model: User,
           as: 'relatedUser',
           attributes: ['id', 'name', 'email'],
         },
@@ -36,9 +36,10 @@ async function getNotifications(userId, limit = 20, offset = 0) {
 
     const count = await Notification.count({ where: { userId } });
 
+    console.log(`[NotificationService] Fetched ${notifications.length} notifications for user ${userId}`);
     return { notifications, total: count };
   } catch (error) {
-    console.error('Failed to fetch notifications:', error.message);
+    console.error('❌ [NotificationService] Failed to fetch notifications:', error.message);
     return { notifications: [], total: 0 };
   }
 }

@@ -1,4 +1,4 @@
-# DebTox 💸
+# DebTox 💸 
 
 *Simplify expense splitting and debt settlement with friends and groups*
 
